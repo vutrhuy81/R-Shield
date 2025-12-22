@@ -1,0 +1,5 @@
+{
+  "name": "R-Shield",
+  "description": "Ứng dụng theo dõi và phân tích xu hướng tìm kiếm tại Việt Nam sử dụng Gemini AI để thu thập và trực quan hóa dữ liệu.",
+  "requestFramePermissions": []
+}
