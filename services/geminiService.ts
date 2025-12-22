@@ -15,8 +15,8 @@ const parseJSON = (text: string): any => {
 export const fetchTrendData = async (
   terms: string[], startDate: string, endDate: string, geoCode: string, searchType: SearchType, lang: Language
 ): Promise<TrendAnalysisResponse> => {
-  if (!process.env.API_KEY) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   const diffDays = Math.ceil(Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
   
   const prompt = `
