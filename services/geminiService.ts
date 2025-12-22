@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { TrendDataPoint, TrendAnalysisResponse, SearchType, Language } from "../types";
 
@@ -15,8 +14,10 @@ const parseJSON = (text: string): any => {
 export const fetchTrendData = async (
   terms: string[], startDate: string, endDate: string, geoCode: string, searchType: SearchType, lang: Language
 ): Promise<TrendAnalysisResponse> => {
+  // Giữ nguyên logic lấy key bằng import.meta.env cho Vite
   if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
   const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+  
   const diffDays = Math.ceil(Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
   
   const prompt = `
@@ -50,8 +51,10 @@ export const fetchTrendData = async (
 export const analyzeRShieldSimulation = async (
     topic: string, params: any, realData: any[], simulatedPeak: number, realPeak: number, lang: Language
 ): Promise<string> => {
+    // SỬA: Đổi từ process.env sang import.meta.env.VITE_API_KEY để đồng nhất và chạy được trên Vercel/Vite
     if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY});
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    
     const prompt = `
       You are an R-Shield Crisis Management Expert.
       Language: Respond in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
