@@ -50,8 +50,8 @@ export const fetchTrendData = async (
 export const analyzeRShieldSimulation = async (
     topic: string, params: any, realData: any[], simulatedPeak: number, realPeak: number, lang: Language
 ): Promise<string> => {
-    if (!process.env.API_KEY) throw new Error("API Key missing");
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY});
     const prompt = `
       You are an R-Shield Crisis Management Expert.
       Language: Respond in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
