@@ -19,7 +19,7 @@ export const fetchTrendData = async (
   const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   
   const diffDays = Math.ceil(Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
-  
+  /*------------------
   const prompt = `
     Role: Google Trends Data Simulator (R-Shield System).
     Language for the 'summary' field: ${lang === 'vi' ? 'Vietnamese' : 'English'}.
@@ -32,6 +32,37 @@ export const fetchTrendData = async (
     {
       "data": [{ "date": "YYYY-MM-DD", "${terms[0]}": 45, ... }],
       "summary": "Short analysis of trends in ${lang === 'vi' ? 'Vietnamese' : 'English'}."
+    }
+  `;
+  ------------------*/
+  const prompt = `
+    Role: Google Trends Data Simulator (R-Shield System).
+    Language for the 'summary' field: ${lang === 'vi' ? 'Vietnamese' : 'English'}.
+    Task: Generate daily search interest index (0-100) for terms: "${terms.join(', ')}".
+    Config: Geo: ${geoCode}, Type: ${searchType}, Range: ${startDate} to ${endDate} (${diffDays} days).
+    
+    CRITICAL INSTRUCTIONS FOR REALITY SIMULATION:
+    1. **Event Detection (Grounding)**: Use Google Search to find REAL news events causing spikes.
+       - Look for *multiple* distinct events within the timeframe (e.g., initial rumors, official investigation, court dates, or separate unrelated incidents under the same keyword).
+       - Case Example: If analyzing a legal case, look for separate spikes for "Initial Rumors", "Official Arrest", and "Court Trial".
+    
+    2. **Curve Modeling**:
+       - **Explosive Event**: Jump from low (<10) to high (90-100) immediately (e.g., breaking news, arrests).
+       - **Prolonged Interest**: Gradual rise and slow decay (e.g., ongoing rumors, leaked documents).
+       - **Baseline**: Days with no news should have natural noise (5-15), NOT zero.
+
+    3. **Output Requirement**:
+       - Provide a strictly valid JSON object.
+       - The 'summary' must explicitly mention the specific real-world events found (dates and context) that caused the simulated peaks.
+       - 'data' must contain exactly one entry per day for the requested range.
+
+    Output JSON Format:
+    {
+      "data": [
+        { "date": "YYYY-MM-DD", "${terms[0]}": 12, ... },
+        ...
+      ],
+      "summary": "Detailed analysis identifying the specific events (e.g., Event A on Date X, Event B on Date Y) that drove the trends."
     }
   `;
 
