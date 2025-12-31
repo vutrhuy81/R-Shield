@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language } from './types';
-import { GOOGLE_COLORS } from './constants';
+import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
 import { translations } from './translations';
 import TagInput from './components/TagInput';
 import TrendChart from './components/TrendChart';
@@ -32,6 +31,9 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [dataSource, setDataSource] = useState<DataSource>('GEMINI');
 
+  // --- R-Shield Model State (Lifted for syncing) ---
+  const [realData, setRealData] = useState<any[]>(DEFAULT_REAL_DATA);
+
   // Filters State
   const [geoLocation, setGeoLocation] = useState<string>('VN');
   const [searchType, setSearchType] = useState<SearchType>('web');
@@ -42,6 +44,30 @@ const App: React.FC = () => {
 
   const [startDate, setStartDate] = useState<string>(thirtyDaysAgo.toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState<string>(today.toISOString().split('T')[0]);
+
+  // Sync Logic: Automatically update R-Shield real data when trend data is fetched
+  useEffect(() => {
+    if (data && data.length > 0 && terms.length > 0) {
+      // Sort data chronologically to map to Day 0, Day 1...
+      const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      const syncedData = sorted.map((point, index) => {
+        let totalReach = 0;
+        // Sum reach for all tracked terms on this day
+        terms.forEach(term => {
+          const indexValue = Number(point[term.term] || 0);
+          totalReach += Math.round(indexValue * K_FACTOR);
+        });
+        
+        return {
+          day: index,
+          real_I: totalReach
+        };
+      });
+
+      setRealData(syncedData);
+    }
+  }, [data, terms]);
 
   useEffect(() => {
     if (user && user.role === 'GUEST') {
@@ -169,7 +195,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!import.meta.env.VITE_API_KEY && (
+        {!process.env.API_KEY && (
            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-400" />
@@ -221,7 +247,8 @@ const App: React.FC = () => {
                 <EstimatedReachTable data={data} terms={terms} lang={lang} />
             </div>
         ) : (
-            <RShieldTab terms={terms} lang={lang} />
+            // R-SHIELD TAB (Visible to both ADMIN and GUEST)
+            <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
         )}
       </main>
       <button onClick={() => setIsManualOpen(true)} className="fixed bottom-6 right-6 md:hidden bg-blue-600 text-white p-4 rounded-full shadow-2xl z-40"><HelpCircle size={24} /></button>
