@@ -85,7 +85,7 @@ export const analyzeRShieldSimulation = async (
     // SỬA: Đổi từ process.env sang import.meta.env.VITE_API_KEY để đồng nhất và chạy được trên Vercel/Vite
     if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
     const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
-    
+    /*-----------------------
     const prompt = `
       You are an R-Shield Crisis Management Expert.
       Language: Respond in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
@@ -98,6 +98,48 @@ export const analyzeRShieldSimulation = async (
       3. Recommend R-Shield Actions (Technical, Communication, Educational/Legal).
       Output in Markdown format.
     `;
+    -------------*/
+
+  const prompt = `
+    You are an **R-Shield Social Media Crisis & Disinformation Analyst**.
+    Your goal is to analyze the spread of rumors/news based on the SEIR mathematical model applied to **Information Diffusion**, NOT biological viruses.
+  
+    **CONTEXT & MAPPING:**
+    - **Topic:** "${topic}"
+    - **Population (N):** Total Netizens (internet users) in the monitored area.
+    - **Infected (I):** People actively discussing/sharing the news/rumor.
+    - **Exposed (E):** People who saw the news but haven't shared yet.
+    - **Recovered (R):** People who lost interest or accepted the official truth.
+    - **Beta ($\beta$):** Virality rate / Sensationalism of the news. High Beta = Viral content.
+    - **Alpha ($\alpha$):** Reaction speed (Time from reading to sharing).
+    - **Gamma ($\gamma$):** "Boredom" rate or Fact-check effectiveness.
+    - **Intervention:** Actions taken (censorship, official statement, etc.).
+    - **u (Control S):** Effectiveness of Education/Legal warnings.
+    - **v (Control I):** Effectiveness of Technical blocking/content removal.
+  
+    **INPUT DATA:**
+    - Simulation Params: N=${params.N}, Beta=${params.beta}, Alpha=${params.alpha}, Gamma=${params.gamma}, InterventionDay=${params.interventionDay}, u=${params.u}, v=${params.v}.
+    - Peak Interest (Concurrent Users): Real=${realPeak} vs Simulated=${simulatedPeak}.
+  
+    **REQUEST:**
+    Analyze the data and provide a report in **${lang === 'vi' ? 'Vietnamese' : 'English'}** using Markdown format:
+  
+    ## 1. Situation Assessment (Đánh giá Tình hình)
+    - Compare Real vs. Simulated peaks.
+    - **Critical:** If Real > Simulated, imply that "Dark Social" or "Organized campaigns" might be pushing the rumor faster than the algorithm predicted.
+    - Assess the "Virality" ($\beta$) and "Control Effectiveness" ($u, v$). Is the crisis contained or exploding?
+  
+    ## 2. Trend Forecast (Dự báo Xu hướng)
+    - Predict the lifespan of this discussion. Will it fade naturally (High Gamma) or linger (Low Gamma)?
+    - Is there a risk of a "Second Wave" of rumors?
+  
+    ## 3. R-Shield Action Plan (Kế hoạch Hành động)
+    - **Technical (Kỹ thuật):** Recommend keyword filtering, account reporting, reducing reach (If $v$ is low, suggest stronger tech measures).
+    - **Communication (Truyền thông):** Recommend Key Messages, Press Conferences, or KOL deployment to correct information.
+    - **Educational/Legal (Giáo dục/Pháp lý):** Suggest fines for fake news spreaders or public awareness campaigns (Based on $u$).
+  
+    **TONE:** Professional, Analytical, Urgent (if peaks are high). Use terms like "Netizens", "Engagement", "Viral", "Fake News", "Public Sentiment".
+  `;
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
