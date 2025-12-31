@@ -1,15 +1,13 @@
-
 import React from 'react';
 import { SearchTerm, TrendDataPoint, Language } from '../types';
 import { translations } from '../translations';
+import { K_FACTOR } from '../constants';
 
 interface EstimatedReachTableProps {
   data: TrendDataPoint[];
   terms: SearchTerm[];
   lang: Language;
 }
-
-const K_FACTOR = 6000;
 
 const EstimatedReachTable: React.FC<EstimatedReachTableProps> = ({ data, terms, lang }) => {
   const t = translations[lang];
