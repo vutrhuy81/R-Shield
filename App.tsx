@@ -210,7 +210,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!process.env.API_KEY && (
+        {!import.meta.env.VITE_API_KEY && (
            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-400" />
