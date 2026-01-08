@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
 import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2 } from 'lucide-react';
@@ -6,7 +5,6 @@ import { SearchTerm, Language } from '../types';
 import { translations } from '../translations';
 import { analyzeRShieldSimulation } from '../services/geminiService';
 import { DEFAULT_REAL_DATA } from '../constants';
-import { marked } from 'marked';
 
 // --- Interfaces ---
 interface SimulationParams { 
@@ -58,9 +56,11 @@ const runSEIRModelPure = (
     const R = new Float64Array(steps);
 
     // Initial Conditions
+    // Để khớp với thực tế bùng nổ muộn, ta lấy dữ liệu ngày đầu làm mầm mống
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
     const I0 = Math.max(1, startVal); 
     
+    // Mẹo: Để mô phỏng bùng nổ nhanh, giả sử lượng ủ bệnh (E) ban đầu cao hơn I
     E[0] = I0 * 2; 
     I[0] = I0;
     R[0] = 0;
@@ -184,6 +184,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     setIsFitting(true);
     
     setTimeout(() => {
+        // 1. Phân tích dữ liệu thực
         let maxRealVal = 0;
         let peakRealDay = 0;
         realData.forEach(d => {
@@ -193,13 +194,23 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             }
         });
 
+        // 2. Thiết lập GRID SEARCH (Quét lưới)
+        // Thay vì đoán mò, ta thử các kịch bản khả thi nhất
         let bestParams = { ...params };
         let minError = Infinity;
 
+        // Kịch bản N: Phải lớn hơn đỉnh thực tế. Thử các mức: 1.5x, 3x, 5x, 10x
         const n_candidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10];
+        
+        // Kịch bản Beta: Từ chậm (1.0) đến siêu nhanh (10.0)
         const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0, 8.0];
+        
+        // Kịch bản Gamma: Giữ ổn định quanh 0.3 - 0.7
         const gamma_candidates = [0.2, 0.4, 0.6];
 
+        // 3. Chạy vòng lặp quét (Brute-force optimization)
+        // Số vòng lặp = 4 * 7 * 3 = 84 (Rất nhanh với trình duyệt)
+        
         for (const n_try of n_candidates) {
             for (const beta_try of beta_candidates) {
                 for (const gamma_try of gamma_candidates) {
@@ -212,6 +223,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
                     const simResults = runSEIRModelPure(testParams, realDataMap, maxRealDay);
 
+                    // Tìm đỉnh mô phỏng
                     let maxSimVal = 0;
                     let peakSimDay = 0;
                     simResults.forEach(s => {
@@ -221,8 +233,15 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         }
                     });
 
+                    // TÍNH ĐIỂM SỐ (LOSS FUNCTION)
+                    // 1. Phạt lệch ngày đỉnh (Quan trọng nhất)
                     const dayError = Math.abs(peakSimDay - peakRealDay);
+                    
+                    // 2. Phạt lệch độ cao đỉnh (Tương đối)
                     const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / maxRealVal;
+
+                    // Công thức điểm lỗi tổng hợp
+                    // Ưu tiên khớp ngày đỉnh (hệ số 1000) rồi mới đến khớp độ cao
                     const totalError = (dayError * 1000) + (heightErrorRatio * 100);
 
                     if (totalError < minError) {
@@ -233,7 +252,9 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             }
         }
 
+        // 4. Làm tròn số liệu
         bestParams.N = Math.round(bestParams.N);
+        
         setParams(bestParams);
         setIsFitting(false);
     }, 100);
@@ -254,25 +275,14 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     finally { setIsAnalyzing(false); }
   };
 
-  const getMarkdownHtml = (content: string) => {
-    if (!content) return { __html: "" };
-    
-    // Improved logic to capture everything between dollar signs and wrap in math-symbol span
-    const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
-      // Remove LaTeX backslashes for common greek letters to make them look cleaner with the selected font
-      const clean = p1.replace(/\\/g, '');
-      return `<span class="math-symbol">${clean}</span>`;
-    });
-    
-    return { __html: marked.parse(processed) as string };
-  };
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Left Panel: Controls */}
       <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-fit max-h-[90vh] overflow-y-auto">
         <div className="flex items-center gap-2 mb-4 text-blue-800 border-b pb-3"><Settings size={20} /><h2 className="text-lg font-semibold">{t.configModel}</h2></div>
         
         <div className="space-y-6">
+          {/* Real Data Input */}
           <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
              <div className="flex items-center justify-between mb-3">
                <h3 className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1"><Database size={14} /> {t.realData}</h3>
@@ -292,6 +302,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
              </div>
           </div>
 
+          {/* Spread Parameters & AUTO FIT */}
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 relative">
             <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-bold text-blue-600 uppercase">{t.spreadParams}</h3>
@@ -319,6 +330,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
+          {/* Environment Parameters */}
           <div className="bg-gray-50 p-3 rounded-lg border">
             <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">{t.envTime}</h3>
             <div className="space-y-3">
@@ -333,6 +345,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
+          {/* R-Shield Strategy */}
           <div className="bg-red-50 p-3 rounded-lg border border-red-100">
             <h3 className="text-xs font-bold text-red-600 uppercase mb-3 flex items-center gap-1"><ShieldAlert size={14} /> {t.shieldStrategy}</h3>
             <div className="space-y-3">
@@ -346,6 +359,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
           <button onClick={() => { setParams(DEFAULT_PARAMS); setRealData(DEFAULT_REAL_DATA); }} className="w-full py-2 text-sm text-gray-600 border border-dashed rounded-lg flex items-center justify-center gap-2 hover:border-blue-400 transition-colors bg-white"><RefreshCw size={14} /> {t.restoreDefault}</button>
           
+          {/* AI Consultation */}
           <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mt-4 shadow-sm">
              <div className="flex items-center gap-2 mb-2"><BrainCircuit size={16} className="text-indigo-600"/><h3 className="text-xs font-bold text-indigo-700 uppercase">{t.consultationTitle}</h3></div>
              <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={t.rumorTopic} className="w-full p-2 text-sm border rounded mb-2 outline-none focus:border-indigo-400" />
@@ -356,6 +370,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         </div>
       </div>
 
+      {/* Right Panel: Chart & Analysis */}
       <div className="lg:col-span-2 space-y-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex justify-between items-center mb-6">
@@ -383,6 +398,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
              {[
                  { label: t.peakSim, value: Math.max(...chartData.map(d => d.sim_I || 0)), color: "text-blue-600" },
@@ -397,16 +413,11 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
              ))}
         </div>
 
+        {/* AI Analysis Result */}
         {analysisResult && (
-            <div className="bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl mt-6">
-                <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
-                  <MessageSquare className="text-white" size={20} />
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.expertView}</h3>
-                </div>
-                <div 
-                  className="p-8 text-gray-800 leading-relaxed font-sans text-sm md:text-base max-h-[800px] overflow-y-auto prose prose-indigo"
-                  dangerouslySetInnerHTML={getMarkdownHtml(analysisResult)}
-                />
+            <div className="bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex items-center gap-2"><MessageSquare className="text-indigo-600" size={20} /><h3 className="text-lg font-semibold text-indigo-900">{t.expertView}</h3></div>
+                <div className="p-6 text-gray-800 leading-relaxed whitespace-pre-wrap font-sans text-sm md:text-base max-h-[400px] overflow-y-auto prose prose-indigo">{analysisResult}</div>
             </div>
         )}
       </div>
