@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language } from './types';
 import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
@@ -12,7 +11,6 @@ import LoginPage from './components/LoginPage';
 import UserManual from './components/UserManual';
 import { fetchTrendData } from './services/geminiService';
 import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe } from 'lucide-react';
-import { marked } from 'marked';
 
 const App: React.FC = () => {
   // --- Auth & Language State ---
@@ -128,19 +126,6 @@ const App: React.FC = () => {
     }
   };
 
-  const getMarkdownHtml = (content: string) => {
-    if (!content) return { __html: "" };
-    
-    // Improved regex to handle LaTeX symbols and Greek letters inside dollar signs
-    const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
-      // Optional: Replace common LaTeX commands with clean text for better font rendering
-      const clean = p1.replace(/\\/g, '');
-      return `<span class="math-symbol">${clean}</span>`;
-    });
-    
-    return { __html: marked.parse(processed) as string };
-  };
-
   if (!user) return <LoginPage onLogin={handleLogin} lang={lang} onToggleLang={toggleLang} />;
 
   return (
@@ -210,7 +195,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!process.env.API_KEY && (
+        {!import.meta.env.VITE_API_KEY && (
            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-400" />
@@ -239,10 +224,7 @@ const App: React.FC = () => {
                             <Sparkles size={18} className="text-blue-500" />
                             {t.aiAnalysis}
                         </h3>
-                        <div 
-                          className="prose prose-sm prose-blue text-blue-800 leading-relaxed"
-                          dangerouslySetInnerHTML={getMarkdownHtml(summary)}
-                        />
+                        <p className="text-blue-800 leading-relaxed text-sm mb-4">{summary}</p>
 
                         {groundingMetadata?.groundingChunks && groundingMetadata.groundingChunks.some((c: any) => c.web) && (
                           <div className="mt-4 pt-4 border-t border-blue-100">
