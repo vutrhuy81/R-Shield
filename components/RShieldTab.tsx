@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
 import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2 } from 'lucide-react';
@@ -9,17 +8,20 @@ import { DEFAULT_REAL_DATA } from '../constants';
 import { marked } from 'marked';
 
 // --- Interfaces ---
+// Cập nhật tham số theo phương trình trong ảnh
 interface SimulationParams { 
   N: number; 
-  tau: number; 
+  tau: number;       // Time delay
   dt: number; 
   T_end: number; 
-  beta: number; 
-  alpha: number; 
-  gamma: number; 
+  beta: number;      // Hệ số lây nhiễm
+  alpha: number;     // Hệ số ủ bệnh (E -> I)
+  gamma: number;     // Hệ số hồi phục
   interventionDay: number; 
-  u: number; 
-  v: number; 
+  up: number;        // u_p: Kiểm soát S (Giáo dục/Phòng ngừa)
+  ug: number;        // u_g: Kiểm soát E (Phản bác tin đồn)
+  rho: number;       // rho: Hiệu suất của u_g
+  v: number;         // v (nu): Kiểm soát I (Chặn kỹ thuật)
 }
 
 interface RealDataPoint { 
@@ -29,25 +31,27 @@ interface RealDataPoint {
 
 // --- Constants ---
 const DEFAULT_PARAMS: SimulationParams = { 
-  N: 2000000,    // Tăng N mặc định lên mức an toàn
-  tau: 1.0,      
+  N: 2000000,
+  tau: 0.5,      
   dt: 0.05,      
-  T_end: 30,     
-  beta: 2.0,     
-  alpha: 1.0,    
-  gamma: 0.5,    
-  interventionDay: 10.0, 
-  u: 0.1,        
-  v: 0.2         
+  T_end: 15,     
+  beta: 0.752,     
+  alpha: 0.676,    
+  gamma: 0.1,    
+  interventionDay: 5.0, 
+  up: 0.01,       // Default u_p
+  ug: 3.393,       // Default u_g
+  rho: 0.6,      // Default rho
+  v: 0.2         // Default v
 };
 
-// --- PURE MATH FUNCTION (SEIR Model) ---
+// --- PURE MATH FUNCTION (Updated SEIR Model with Delay & Controls) ---
 const runSEIRModelPure = (
     params: SimulationParams, 
     realDataMap: Map<number, number>, 
     maxRealDay: number
 ) => {
-    const { N, tau, dt, T_end, beta, alpha, gamma, interventionDay, u: u_active, v: v_active } = params;
+    const { N, tau, dt, T_end, beta, alpha, gamma, interventionDay, up: up_active, ug: ug_active, rho, v: v_active } = params;
     const final_T_end = Math.max(T_end, maxRealDay); 
     const steps = Math.floor(final_T_end / dt) + 1;
     const lagSteps = Math.floor(tau / dt);
@@ -68,34 +72,66 @@ const runSEIRModelPure = (
 
     for (let i = 0; i < steps - 1; i++) {
       const currentTime = i * dt;
+      
+      // Xử lý biến trễ (Delay Variable)
       const idx_past = i - lagSteps;
       const S_past = idx_past >= 0 ? S[idx_past] : S[0]; 
       const I_past = idx_past >= 0 ? I[idx_past] : I[0];
 
-      const u = currentTime >= interventionDay ? u_active : 0;
-      const v = currentTime >= interventionDay ? v_active : 0;
+      // Kích hoạt tham số kiểm soát sau ngày can thiệp
+      const isIntervention = currentTime >= interventionDay;
+      const up_val = isIntervention ? up_active : 0;
+      const ug_val = isIntervention ? ug_active : 0;
+      const v_val  = isIntervention ? v_active : 0;
 
-      // Equations
-      const infection = (beta * S_past * I_past) / N;
-      const incubation = alpha * E[i];
-      const recovery = (gamma * I[i] * (I[i] + R[i])) / N; 
+      // --- CÁC PHƯƠNG TRÌNH TỪ HÌNH ẢNH ---
+      
+      // 1. Tốc độ lây nhiễm có trễ: beta * S(t-tau) * I(t-tau) / N
+      const infectionRate = (beta * S_past * I_past) / N;
+      
+      // 2. Tốc độ chuyển từ E sang I: alpha * E(t)
+      const incubationRate = alpha * E[i];
+      
+      // 3. Tốc độ hồi phục (Lưu ý: Phương trình dùng gamma * I * (I+R) / N)
+      // Đây là điểm khác biệt so với mô hình chuẩn (gamma * I)
+      const recoveryRate = (gamma * I[i] * (I[i] + R[i])) / N; 
 
-      const dS = -infection - (u * S[i]);
-      const dE = infection - incubation - (0.05 * E[i]); 
-      const dI = incubation - recovery - (v * I[i]);
-      const dR = recovery + (v * I[i]) + (u * S[i]);
+      // Các số hạng kiểm soát
+      const controlS = up_val * S[i];                // u_p * S(t)
+      const controlE = rho * ug_val * E[i];          // rho * u_g(t) * E(t)
+      const controlI = v_val * I[i];                 // v * I(t)
 
+      // --- HỆ PHƯƠNG TRÌNH ---
+      // dS/dt = - Infection - u_p*S
+      const dS = -infectionRate - controlS;
+
+      // dE/dt = Infection - alpha*E - rho*u_g*E
+      const dE = infectionRate - incubationRate - controlE;
+
+      // dI/dt = alpha*E - Recovery - v*I
+      const dI = incubationRate - recoveryRate - controlI;
+
+      // dR/dt = Recovery + v*I + u_p*S + rho*u_g*E
+      const dR = recoveryRate + controlI + controlS + controlE;
+
+      // Cập nhật trạng thái tiếp theo (Euler method)
       S[i + 1] = Math.max(0, S[i] + dS * dt);
       E[i + 1] = Math.max(0, E[i] + dE * dt);
       I[i + 1] = Math.max(0, I[i] + dI * dt);
       R[i + 1] = Math.max(0, R[i] + dR * dt);
     }
     
-    // Downsampling
+    // Downsampling cho biểu đồ
     const resultI = [];
     for (let d = 0; d <= final_T_end; d++) {
         const idx = Math.min(Math.floor(d / dt), steps - 1);
-        resultI.push({ day: d, sim_I: I[idx] });
+        resultI.push({ 
+            day: d, 
+            sim_I: I[idx],
+            sim_S: S[idx],
+            sim_E: E[idx],
+            sim_R: R[idx] 
+        });
     }
     return resultI;
 };
@@ -124,55 +160,19 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const realDataMap = useMemo(() => new Map(realData.map(d => [d.day, d.real_I])), [realData]);
   const maxRealDay = useMemo(() => realData.length > 0 ? realData[realData.length - 1].day : 0, [realData]);
 
-  // --- Run Simulation for Charting ---
+  // --- Run Simulation for Charting (Using Pure Function Logic) ---
   const runSimulation = useMemo(() => {
-    const { N, tau, dt, T_end, beta, alpha, gamma, interventionDay, u: u_active, v: v_active } = params;
-    const final_T_end = Math.max(T_end, maxRealDay); 
-    const steps = Math.floor(final_T_end / dt) + 1;
-    const lagSteps = Math.floor(tau / dt);
+    // Gọi hàm pure để tính toán, sau đó map lại dữ liệu khớp với format biểu đồ
+    const rawResults = runSEIRModelPure(params, realDataMap, maxRealDay);
     
-    const S = new Float64Array(steps), E = new Float64Array(steps), I = new Float64Array(steps), R = new Float64Array(steps);
-    
-    const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
-    const I0 = Math.max(1, startVal); 
-    I[0] = I0; E[0] = I0 * 2; R[0] = 0; S[0] = Math.max(0, N - E[0] - I[0] - R[0]);
-
-    for (let i = 0; i < steps - 1; i++) {
-        const currentTime = i * dt;
-        const idx_past = i - lagSteps;
-        const S_past = idx_past >= 0 ? S[idx_past] : S[0]; 
-        const I_past = idx_past >= 0 ? I[idx_past] : I[0];
-        const u = currentTime >= interventionDay ? u_active : 0;
-        const v = currentTime >= interventionDay ? v_active : 0;
-        
-        const infection = (beta * S_past * I_past) / N;
-        const incubation = alpha * E[i];
-        const recovery = (gamma * I[i] * (I[i] + R[i])) / N; 
-        
-        const dS = -infection - (u * S[i]);
-        const dE = infection - incubation - (0.05 * E[i]); 
-        const dI = incubation - recovery - (v * I[i]);
-        const dR = recovery + (v * I[i]) + (u * S[i]);
-        
-        S[i + 1] = Math.max(0, S[i] + dS * dt);
-        E[i + 1] = Math.max(0, E[i] + dE * dt);
-        I[i + 1] = Math.max(0, I[i] + dI * dt);
-        R[i + 1] = Math.max(0, R[i] + dR * dt);
-    }
-
-    const results = [];
-    for (let d = 0; d <= final_T_end; d++) {
-        const idx = Math.min(Math.floor(d / dt), steps - 1);
-        results.push({
-            day: d,
-            sim_S: Math.round(S[idx]),
-            sim_E: Math.round(E[idx]),
-            sim_I: Math.round(I[idx]),
-            sim_R: Math.round(R[idx]),
-            real_I: realDataMap.get(d) ?? null
-        });
-    }
-    return results;
+    return rawResults.map(item => ({
+        day: item.day,
+        sim_S: Math.round(item.sim_S || 0),
+        sim_E: Math.round(item.sim_E || 0),
+        sim_I: Math.round(item.sim_I || 0),
+        sim_R: Math.round(item.sim_R || 0),
+        real_I: realDataMap.get(item.day) ?? null
+    }));
   }, [params, realDataMap, maxRealDay]);
 
   useEffect(() => { setChartData(runSimulation); }, [runSimulation]);
@@ -183,6 +183,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
     setIsFitting(true);
     
+    // Sử dụng setTimeout để không block UI render
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
@@ -196,38 +197,47 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         let bestParams = { ...params };
         let minError = Infinity;
 
+        // Grid Search Ranges
         const n_candidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10];
-        const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0, 8.0];
-        const gamma_candidates = [0.2, 0.4, 0.6];
+        const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0];
+        const gamma_candidates = [0.2, 0.4, 0.6, 0.8];
+        const alpha_candidates = [0.5, 1.0, 1.5]; // Thêm alpha vào search
 
         for (const n_try of n_candidates) {
             for (const beta_try of beta_candidates) {
                 for (const gamma_try of gamma_candidates) {
-                    const testParams = {
-                        ...params,
-                        N: n_try,
-                        beta: beta_try,
-                        gamma: gamma_try
-                    };
+                    for (const alpha_try of alpha_candidates) {
+                        const testParams = {
+                            ...params,
+                            N: n_try,
+                            beta: beta_try,
+                            gamma: gamma_try,
+                            alpha: alpha_try
+                        };
 
-                    const simResults = runSEIRModelPure(testParams, realDataMap, maxRealDay);
+                        const simResults = runSEIRModelPure(testParams, realDataMap, maxRealDay);
 
-                    let maxSimVal = 0;
-                    let peakSimDay = 0;
-                    simResults.forEach(s => {
-                        if (s.sim_I > maxSimVal) {
-                            maxSimVal = s.sim_I;
-                            peakSimDay = s.day;
+                        let maxSimVal = 0;
+                        let peakSimDay = 0;
+                        simResults.forEach(s => {
+                            // @ts-ignore
+                            if (s.sim_I > maxSimVal) {
+                                // @ts-ignore
+                                maxSimVal = s.sim_I;
+                                peakSimDay = s.day;
+                            }
+                        });
+
+                        const dayError = Math.abs(peakSimDay - peakRealDay);
+                        const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / maxRealVal;
+                        
+                        // Weighted Error Function
+                        const totalError = (dayError * 1000) + (heightErrorRatio * 100);
+
+                        if (totalError < minError) {
+                            minError = totalError;
+                            bestParams = testParams;
                         }
-                    });
-
-                    const dayError = Math.abs(peakSimDay - peakRealDay);
-                    const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / maxRealVal;
-                    const totalError = (dayError * 1000) + (heightErrorRatio * 100);
-
-                    if (totalError < minError) {
-                        minError = totalError;
-                        bestParams = testParams;
                     }
                 }
             }
@@ -256,14 +266,10 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
   const getMarkdownHtml = (content: string) => {
     if (!content) return { __html: "" };
-    
-    // Improved logic to capture everything between dollar signs and wrap in math-symbol span
     const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
-      // Remove LaTeX backslashes for common greek letters to make them look cleaner with the selected font
       const clean = p1.replace(/\\/g, '');
       return `<span class="math-symbol">${clean}</span>`;
     });
-    
     return { __html: marked.parse(processed) as string };
   };
 
@@ -273,6 +279,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         <div className="flex items-center gap-2 mb-4 text-blue-800 border-b pb-3"><Settings size={20} /><h2 className="text-lg font-semibold">{t.configModel}</h2></div>
         
         <div className="space-y-6">
+          {/* Data Input Section */}
           <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
              <div className="flex items-center justify-between mb-3">
                <h3 className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1"><Database size={14} /> {t.realData}</h3>
@@ -288,10 +295,11 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                      <input type="number" value={p.real_I} onChange={(e) => { const nd = [...realData]; nd[i].real_I = parseInt(e.target.value) || 0; setRealData(nd); }} className="flex-1 p-1 border rounded text-right focus:ring-1 focus:ring-amber-300 outline-none" />
                    </div>
                  ))}
-                 {realData.length === 0 && <p className="text-center text-gray-400 py-4 italic text-xs">{lang === 'vi' ? 'Chưa có dữ liệu. Hãy nhập thủ công hoặc tải từ API.' : 'No data. Please input manually or fetch.'}</p>}
+                 {realData.length === 0 && <p className="text-center text-gray-400 py-4 italic text-xs">{lang === 'vi' ? 'Chưa có dữ liệu.' : 'No data.'}</p>}
              </div>
           </div>
 
+          {/* Core Parameters Section */}
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 relative">
             <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-bold text-blue-600 uppercase">{t.spreadParams}</h3>
@@ -310,7 +318,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                {['beta', 'alpha', 'gamma'].map(key => (
                  <div key={key}>
                    <div className="flex justify-between text-xs mb-1">
-                     <span className="capitalize">{key === 'beta' ? t.infection : key === 'alpha' ? t.incubation : t.recovery} ({key})</span>
+                     <span className="capitalize font-mono">{key}</span>
                      <b className="text-blue-800">{params[key as keyof SimulationParams].toFixed(2)}</b>
                    </div>
                    <input type="range" min="0" max={key === 'gamma' ? 10 : 20} step="0.01" value={params[key as keyof SimulationParams]} onChange={(e) => handleParamChange(key as any, e.target.value)} className="w-full h-1.5 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
@@ -319,27 +327,34 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
+          {/* Environment Parameters */}
           <div className="bg-gray-50 p-3 rounded-lg border">
             <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">{t.envTime}</h3>
             <div className="space-y-3">
               <div>
-                  <label className="text-xs font-medium block mb-1">{t.population} (N) - <span className="text-gray-400 font-normal">Est. Audience</span></label>
+                  <label className="text-xs font-medium block mb-1">{t.population} (N)</label>
                   <input type="number" value={params.N} onChange={(e) => handleParamChange('N', e.target.value)} className="w-full p-2 border rounded text-sm bg-yellow-50 focus:bg-white transition-colors" />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="text-xs font-medium block mb-1">{t.duration} (Days)</label><input type="number" value={params.T_end} onChange={(e) => handleParamChange('T_end', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
-                <div><label className="text-xs font-medium block mb-1">{t.delay} (Tau)</label><input type="number" step="0.1" value={params.tau} onChange={(e) => handleParamChange('tau', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
+                <div><label className="text-xs font-medium block mb-1">T_end (Days)</label><input type="number" value={params.T_end} onChange={(e) => handleParamChange('T_end', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
+                <div><label className="text-xs font-medium block mb-1">Tau (Delay)</label><input type="number" step="0.1" value={params.tau} onChange={(e) => handleParamChange('tau', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
               </div>
             </div>
           </div>
 
+          {/* Strategy / Intervention Parameters */}
           <div className="bg-red-50 p-3 rounded-lg border border-red-100">
             <h3 className="text-xs font-bold text-red-600 uppercase mb-3 flex items-center gap-1"><ShieldAlert size={14} /> {t.shieldStrategy}</h3>
             <div className="space-y-3">
               <div><label className="text-xs font-medium block mb-1">{t.interventionDay} (Start Day)</label><input type="number" value={params.interventionDay} onChange={(e) => handleParamChange('interventionDay', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
+              
               <div className="grid grid-cols-2 gap-2">
-                 <div><label className="text-[10px] font-medium block mb-1">{t.controlS} (Edu/Legal)</label><input type="number" step="0.1" value={params.u} onChange={(e) => handleParamChange('u', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
-                 <div><label className="text-[10px] font-medium block mb-1">{t.controlI} (Tech Block)</label><input type="number" step="0.1" value={params.v} onChange={(e) => handleParamChange('v', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
+                 <div><label className="text-[10px] font-medium block mb-1 font-mono">u_p (S Control)</label><input type="number" step="0.05" value={params.up} onChange={(e) => handleParamChange('up', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
+                 <div><label className="text-[10px] font-medium block mb-1 font-mono">u_g (E Control)</label><input type="number" step="0.05" value={params.ug} onChange={(e) => handleParamChange('ug', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                 <div><label className="text-[10px] font-medium block mb-1 font-mono">v (I Control)</label><input type="number" step="0.05" value={params.v} onChange={(e) => handleParamChange('v', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
+                 <div><label className="text-[10px] font-medium block mb-1 font-mono">rho (Ug Effect)</label><input type="number" step="0.1" value={params.rho} onChange={(e) => handleParamChange('rho', e.target.value)} className="w-full p-1 border rounded text-sm" /></div>
               </div>
             </div>
           </div>
@@ -363,7 +378,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                 <h3 className="text-lg font-semibold flex items-center gap-2"><Activity className="text-blue-600" size={20}/> {t.simulationResult}</h3>
                 <p className="text-sm text-gray-500">{t.compareDesc}</p>
               </div>
-              <div className="text-right"><span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">Intervention Day: {params.interventionDay}</span></div>
+              <div className="text-right"><span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">Intervention: Day {params.interventionDay}</span></div>
             </div>
             
             <div className="w-full h-[400px]">
@@ -375,9 +390,9 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         <Tooltip labelFormatter={(l) => `${t.day} ${l}`} formatter={(v: any) => formatNumber(v)} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                         <Legend verticalAlign="top" height={36}/>
                         <Bar dataKey="real_I" name={lang === 'vi' ? "Thực tế (Real)" : "Real Data"} barSize={20} fill="#FCA5A5" opacity={0.6} radius={[4, 4, 0, 0]} />
-                        <Line type="monotone" dataKey="sim_I" name={lang === 'vi' ? "Mô phỏng (Infected)" : "Sim (Infected)"} stroke="#2563EB" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="sim_I" name={lang === 'vi' ? "Lây nhiễm (Infected)" : "Sim (Infected)"} stroke="#2563EB" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
                         <Line type="monotone" dataKey="sim_E" name={lang === 'vi' ? "Ủ tin (Exposed)" : "Sim (Exposed)"} stroke="#10B981" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                        <Line type="monotone" dataKey="sim_R" name={lang === 'vi' ? "Đã biết/Bão hòa (R)" : "Sim (Recovered)"} stroke="#6B7280" strokeWidth={1} dot={false} opacity={0.5} />
+                        <Line type="monotone" dataKey="sim_R" name={lang === 'vi' ? "Hồi phục (Recovered)" : "Sim (Recovered)"} stroke="#6B7280" strokeWidth={1} dot={false} opacity={0.5} />
                     </ComposedChart>
                 </ResponsiveContainer>
             </div>
