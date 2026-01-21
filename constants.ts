@@ -14,7 +14,7 @@ export const MOCK_INITIAL_TERMS = [
   "Lạng Sơn"
 ];
 
-export const K_FACTOR = 6000;
+export const K_FACTOR = 5715;
 
 export const DEFAULT_REAL_DATA = [
   { day: 0, real_I: 5000 },
