@@ -27,18 +27,29 @@ export const fetchTrendData = async (
     
     CRITICAL INSTRUCTIONS FOR REALITY SIMULATION:
     1. **Event Detection (Grounding)**: Use Google Search to find REAL news events causing spikes.
-       - Look for *multiple* distinct events within the timeframe.
-       - Case Example: If analyzing a legal case, look for separate spikes for "Rumors", "Arrest", and "Trial".
+       - Look for *multiple* distinct events within the timeframe (e.g., initial rumors, official investigation, court dates, or separate unrelated incidents under the same keyword).
+       - Case Example: If analyzing a legal case, look for separate spikes for "Initial Rumors", "Official Arrest", and "Court Trial".
     
     2. **Curve Modeling**:
-       - **Explosive Event**: Jump from low (<10) to high (90-100) immediately.
-       - **Prolonged Interest**: Gradual rise and slow decay.
+       - **Explosive Event**: Jump from low (<10) to high (90-100) immediately (e.g., breaking news, arrests).
+       - **Prolonged Interest**: Gradual rise and slow decay (e.g., ongoing rumors, leaked documents).
        - **Baseline**: Days with no news should have natural noise (5-15), NOT zero.
 
-    3. **Output Requirement**:
+    3. **Verification Protocol (Fact-Checking)**:
+       - For every major event identified in step 1, apply a verification logic:
+         a. **Cross-Check Sources**: Do reputable/mainstream media outlets report this, or only social media/tabloids?
+         b. **Official Statements**: Is there a confirmation from authorities (police, government, institutions)?
+         c. **Classification**: Label the event driving the trend as one of the following:
+            - [TIN ĐÃ KIỂM CHỨNG]: Confirmed by multiple reliable sources/authorities.
+            - [TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG]: Viral but lacks official confirmation or reliable sources.
+            - [TIN GIẢ/ĐÃ BỊ BÁC BỎ]: Proven false or miscontextualized information.
+
+    4. **Output Requirement**:
        - Provide a strictly valid JSON object.
-       - The 'summary' must explicitly mention the specific real-world events found.
-       - 'data' must contain exactly one entry per day.
+       - The 'summary' must explicitly mention the specific real-world events found AND their verification status.
+       - 'data' must contain exactly one entry per day for the requested range.       
+       - Display the conclusion: whether this search result is fake news or not.
+       - Always display links to reputable news websites for reference if the search result is not fake news.
 
     Output JSON Format:
     {
@@ -46,7 +57,7 @@ export const fetchTrendData = async (
         { "date": "YYYY-MM-DD", "${terms[0]}": 12, ... },
         ...
       ],
-      "summary": "Detailed analysis identifying the specific events..."
+      "summary": "Detailed analysis identifying specific events. Format: [Date] - [Event Name] ([Verification Status]): Description of the event and why it drove the trend."
     }
   `;
 
