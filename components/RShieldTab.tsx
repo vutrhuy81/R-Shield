@@ -177,6 +177,25 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
   useEffect(() => { setChartData(runSimulation); }, [runSimulation]);
 
+  // --- CALCULATE RC (Basic Reproduction Number under Control) ---
+  const calculatedRc = useMemo(() => {
+    const { N, beta, alpha, rho, ug, v } = params;
+    
+    // Tính s0 dựa trên điều kiện ban đầu (giống logic trong runSEIRModelPure)
+    const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
+    const I0 = Math.max(1, startVal); 
+    const E0 = I0 * 2;
+    const R0 = 0;
+    const S0 = Math.max(0, N - E0 - I0 - R0);
+    const s0 = S0 / N; // s0 = (N - E0 - I0 - R0) / N
+
+    // Công thức Rc: beta * s0 * [alpha / (alpha + rho*ug)] * (1/v)
+    const denominator = (alpha + rho * ug) * v;
+    
+    if (denominator === 0) return 0; // Tránh chia cho 0
+    return (beta * s0 * alpha) / denominator;
+  }, [params, realDataMap]);
+
   // --- SUPER-POWERED AUTO-FITTING (GRID SEARCH) ---
   const handleAutoFit = async () => {
     if (realData.length < 3) return;
@@ -398,16 +417,18 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
              {[
                  { label: t.peakSim, value: Math.max(...chartData.map(d => d.sim_I || 0)), color: "text-blue-600" },
                  { label: t.peakReal, value: realData.length > 0 ? Math.max(...realData.map(d => d.real_I)) : 0, color: "text-red-500" },
                  { label: t.totalInf, value: chartData[chartData.length-1]?.sim_I || 0, color: "text-gray-700" },
                  { label: t.totalRec, value: chartData[chartData.length-1]?.sim_R || 0, color: "text-green-600" },
+                 { label: lang === 'vi' ? "Ngưỡng Rc" : "Rc Threshold", value: calculatedRc, color: calculatedRc > 1 ? "text-red-600" : "text-green-600", isDecimal: true }
              ].map((s, i) => (
                  <div key={i} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm text-center">
                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">{s.label}</p>
-                   <p className={`text-xl font-bold ${s.color}`}>{formatNumber(s.value)}</p>
+                   {/* @ts-ignore */}
+                   <p className={`text-xl font-bold ${s.color}`}>{s.isDecimal ? s.value.toFixed(2) : formatNumber(s.value)}</p>
                  </div>
              ))}
         </div>
