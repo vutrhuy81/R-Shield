@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
-import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2 } from 'lucide-react';
+import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2, Target } from 'lucide-react';
 import { SearchTerm, Language } from '../types';
 import { translations } from '../translations';
 import { analyzeRShieldSimulation } from '../services/geminiService';
@@ -177,24 +177,70 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
   useEffect(() => { setChartData(runSimulation); }, [runSimulation]);
 
-  // --- CALCULATE RC (Basic Reproduction Number under Control) ---
+  // --- CALCULATE RC ---
   const calculatedRc = useMemo(() => {
     const { N, beta, alpha, rho, ug, v } = params;
-    
-    // Tính s0 dựa trên điều kiện ban đầu (giống logic trong runSEIRModelPure)
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
     const I0 = Math.max(1, startVal); 
     const E0 = I0 * 2;
     const R0 = 0;
     const S0 = Math.max(0, N - E0 - I0 - R0);
-    const s0 = S0 / N; // s0 = (N - E0 - I0 - R0) / N
+    const s0 = S0 / N; 
 
-    // Công thức Rc: beta * s0 * [alpha / (alpha + rho*ug)] * (1/v)
     const denominator = (alpha + rho * ug) * v;
-    
-    if (denominator === 0) return 0; // Tránh chia cho 0
+    if (denominator === 0) return 0;
     return (beta * s0 * alpha) / denominator;
   }, [params, realDataMap]);
+
+  // --- AUTO TUNE RC = 1 ---
+  const handleOptimizeRc = () => {
+    // Mục tiêu: Tìm k sao cho nếu v' = k*v, ug' = k*ug thì Rc = 1
+    // Rc = (beta * s0 * alpha) / [(alpha + rho * k * ug) * (k * v)] = 1
+    // => beta * s0 * alpha = k*v * alpha + k^2 * v * rho * ug
+    // => (v * rho * ug) * k^2 + (v * alpha) * k - (beta * s0 * alpha) = 0
+    // Giải phương trình bậc 2 tìm k dương.
+
+    const { N, beta, alpha, rho, ug, v } = params;
+    
+    // Lấy s0
+    const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
+    const I0 = Math.max(1, startVal);
+    const E0 = I0 * 2;
+    const R0 = 0;
+    const S0 = Math.max(0, N - E0 - I0 - R0);
+    const s0 = S0 / N;
+
+    // Đảm bảo giá trị khởi tạo không bằng 0 để có thể scale
+    const baseV = v <= 0.001 ? 0.05 : v;
+    const baseUg = ug <= 0.001 ? 0.5 : ug;
+
+    const A = baseV * rho * baseUg;
+    const B = baseV * alpha;
+    const C = -(beta * s0 * alpha);
+
+    let k = 1;
+    if (Math.abs(A) < 1e-9) {
+        // Trường hợp suy biến thành bậc 1: B*k + C = 0 => k = -C/B
+        if (B !== 0) k = -C / B;
+    } else {
+        const delta = B * B - 4 * A * C;
+        if (delta >= 0) {
+            const k1 = (-B + Math.sqrt(delta)) / (2 * A);
+            const k2 = (-B - Math.sqrt(delta)) / (2 * A);
+            k = Math.max(k1, k2); // Lấy nghiệm dương
+        }
+    }
+
+    if (k > 0 && isFinite(k)) {
+        setParams(prev => ({
+            ...prev,
+            v: parseFloat((baseV * k).toFixed(3)),
+            ug: parseFloat((baseUg * k).toFixed(3)),
+            // Có thể scale cả rho nếu cần, nhưng thường rho là đặc tính cố định.
+            // Ở đây giữ nguyên rho, chỉ điều chỉnh cường độ can thiệp v và ug.
+        }));
+    }
+  };
 
   // --- SUPER-POWERED AUTO-FITTING (GRID SEARCH) ---
   const handleAutoFit = async () => {
@@ -216,11 +262,10 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         let bestParams = { ...params };
         let minError = Infinity;
 
-        // Grid Search Ranges
         const n_candidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10];
         const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0];
         const gamma_candidates = [0.2, 0.4, 0.6, 0.8];
-        const alpha_candidates = [0.5, 1.0, 1.5]; // Thêm alpha vào search
+        const alpha_candidates = [0.5, 1.0, 1.5];
 
         for (const n_try of n_candidates) {
             for (const beta_try of beta_candidates) {
@@ -249,8 +294,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
                         const dayError = Math.abs(peakSimDay - peakRealDay);
                         const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / maxRealVal;
-                        
-                        // Weighted Error Function
                         const totalError = (dayError * 1000) + (heightErrorRatio * 100);
 
                         if (totalError < minError) {
@@ -362,8 +405,19 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
           </div>
 
           {/* Strategy / Intervention Parameters */}
-          <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-            <h3 className="text-xs font-bold text-red-600 uppercase mb-3 flex items-center gap-1"><ShieldAlert size={14} /> {t.shieldStrategy}</h3>
+          <div className="bg-red-50 p-3 rounded-lg border border-red-100 relative">
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="text-xs font-bold text-red-600 uppercase flex items-center gap-1"><ShieldAlert size={14} /> {t.shieldStrategy}</h3>
+                <button 
+                    onClick={handleOptimizeRc}
+                    className="text-[10px] flex items-center gap-1 px-2 py-1 rounded border bg-white text-red-600 border-red-200 hover:bg-red-100 shadow-sm transition-all"
+                    title="Auto-adjust v, ug to make Rc = 1"
+                >
+                    <Target size={12} />
+                    Auto Fit Rc=1
+                </button>
+            </div>
+            
             <div className="space-y-3">
               <div><label className="text-xs font-medium block mb-1">{t.interventionDay} (Start Day)</label><input type="number" value={params.interventionDay} onChange={(e) => handleParamChange('interventionDay', e.target.value)} className="w-full p-2 border rounded text-sm" /></div>
               
