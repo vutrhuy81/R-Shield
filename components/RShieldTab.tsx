@@ -236,8 +236,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             ...prev,
             v: parseFloat((baseV * k).toFixed(3)),
             ug: parseFloat((baseUg * k).toFixed(3)),
-            // Có thể scale cả rho nếu cần, nhưng thường rho là đặc tính cố định.
-            // Ở đây giữ nguyên rho, chỉ điều chỉnh cường độ can thiệp v và ug.
         }));
     }
   };
@@ -486,20 +484,21 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                  </div>
              ))}
         </div>
-
-        {analysisResult && (
-            <div className="bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl mt-6">
-                <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
-                  <MessageSquare className="text-white" size={20} />
-                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.expertView}</h3>
-                </div>
-                <div 
-                  className="p-8 text-gray-800 leading-relaxed font-sans text-sm md:text-base max-h-[800px] overflow-y-auto prose prose-indigo"
-                  dangerouslySetInnerHTML={getMarkdownHtml(analysisResult)}
-                />
-            </div>
-        )}
       </div>
+
+      {/* --- MOVED EXPERT VIEW HERE TO SPAN FULL WIDTH --- */}
+      {analysisResult && (
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl">
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
+                <MessageSquare className="text-white" size={20} />
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.expertView}</h3>
+            </div>
+            <div 
+                className="p-8 text-gray-800 leading-relaxed font-sans text-sm md:text-base max-h-[800px] overflow-y-auto prose prose-indigo max-w-none"
+                dangerouslySetInnerHTML={getMarkdownHtml(analysisResult)}
+            />
+        </div>
+      )}
     </div>
   );
 };
