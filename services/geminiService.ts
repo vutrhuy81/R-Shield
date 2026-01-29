@@ -49,7 +49,7 @@ export const fetchTrendData = async (
        - The 'summary' must explicitly mention the specific real-world events found AND their verification status.
        - 'data' must contain exactly one entry per day for the requested range.       
        - Display the conclusion: whether this search result is fake news or not.
-       - Always display links to reputable news websites for reference if the search result is not fake news.
+       - Always display resource links to reputable news websites for reference if the search result is not fake news.
 
     Output JSON Format:
     {
