@@ -22,6 +22,7 @@ interface SimulationParams {
   ug: number;        // u_g: Kiểm soát E (Phản bác tin đồn)
   rho: number;       // rho: Hiệu suất của u_g
   v: number;         // v (nu): Kiểm soát I (Chặn kỹ thuật)
+  Rc: number;        // [UPDATED] Thêm tham số Rc vào state
 }
 
 interface RealDataPoint { 
@@ -42,7 +43,8 @@ const DEFAULT_PARAMS: SimulationParams = {
   up: 0.01,       // Default u_p
   ug: 3.393,       // Default u_g
   rho: 0.6,      // Default rho
-  v: 0.2         // Default v
+  v: 0.2,        // Default v
+  Rc: 1          // [UPDATED] Default Rc
 };
 
 // --- PURE MATH FUNCTION (Updated SEIR Model with Delay & Controls) ---
@@ -160,11 +162,9 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const realDataMap = useMemo(() => new Map(realData.map(d => [d.day, d.real_I])), [realData]);
   const maxRealDay = useMemo(() => realData.length > 0 ? realData[realData.length - 1].day : 0, [realData]);
 
-  // --- Run Simulation for Charting (Using Pure Function Logic) ---
+  // --- Run Simulation for Charting ---
   const runSimulation = useMemo(() => {
-    // Gọi hàm pure để tính toán, sau đó map lại dữ liệu khớp với format biểu đồ
     const rawResults = runSEIRModelPure(params, realDataMap, maxRealDay);
-    
     return rawResults.map(item => ({
         day: item.day,
         sim_S: Math.round(item.sim_S || 0),
@@ -177,7 +177,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
   useEffect(() => { setChartData(runSimulation); }, [runSimulation]);
 
-  // --- CALCULATE RC ---
+  // --- CALCULATE RC & SYNC TO PARAMS ---
   const calculatedRc = useMemo(() => {
     const { N, beta, alpha, rho, ug, v } = params;
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
@@ -190,19 +190,20 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const denominator = (alpha + rho * ug) * v;
     if (denominator === 0) return 0;
     return (beta * s0 * alpha) / denominator;
-  }, [params, realDataMap]);
+  }, [params.N, params.beta, params.alpha, params.rho, params.ug, params.v, realDataMap]);
+
+  // [UPDATED] Effect để lưu Rc vào params khi giá trị tính toán thay đổi
+  useEffect(() => {
+      // Chỉ update nếu giá trị chênh lệch đáng kể (tránh loop vô tận do số thực)
+      if (Math.abs(params.Rc - calculatedRc) > 0.000001) {
+          setParams(prev => ({ ...prev, Rc: calculatedRc }));
+      }
+  }, [calculatedRc, params.Rc]);
 
   // --- AUTO TUNE RC = 1 ---
   const handleOptimizeRc = () => {
-    // Mục tiêu: Tìm k sao cho nếu v' = k*v, ug' = k*ug thì Rc = 1
-    // Rc = (beta * s0 * alpha) / [(alpha + rho * k * ug) * (k * v)] = 1
-    // => beta * s0 * alpha = k*v * alpha + k^2 * v * rho * ug
-    // => (v * rho * ug) * k^2 + (v * alpha) * k - (beta * s0 * alpha) = 0
-    // Giải phương trình bậc 2 tìm k dương.
-
     const { N, beta, alpha, rho, ug, v } = params;
     
-    // Lấy s0
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
     const I0 = Math.max(1, startVal);
     const E0 = I0 * 2;
@@ -210,7 +211,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const S0 = Math.max(0, N - E0 - I0 - R0);
     const s0 = S0 / N;
 
-    // Đảm bảo giá trị khởi tạo không bằng 0 để có thể scale
     const baseV = v <= 0.001 ? 0.05 : v;
     const baseUg = ug <= 0.001 ? 0.5 : ug;
 
@@ -220,14 +220,13 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
     let k = 1;
     if (Math.abs(A) < 1e-9) {
-        // Trường hợp suy biến thành bậc 1: B*k + C = 0 => k = -C/B
         if (B !== 0) k = -C / B;
     } else {
         const delta = B * B - 4 * A * C;
         if (delta >= 0) {
             const k1 = (-B + Math.sqrt(delta)) / (2 * A);
             const k2 = (-B - Math.sqrt(delta)) / (2 * A);
-            k = Math.max(k1, k2); // Lấy nghiệm dương
+            k = Math.max(k1, k2); 
         }
     }
 
@@ -236,17 +235,17 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             ...prev,
             v: parseFloat((baseV * k).toFixed(3)),
             ug: parseFloat((baseUg * k).toFixed(3)),
+            // Rc sẽ tự động được update bởi useEffect ở trên sau khi v và ug thay đổi
         }));
     }
   };
 
-  // --- SUPER-POWERED AUTO-FITTING (GRID SEARCH) ---
+  // --- SUPER-POWERED AUTO-FITTING ---
   const handleAutoFit = async () => {
     if (realData.length < 3) return;
 
     setIsFitting(true);
     
-    // Sử dụng setTimeout để không block UI render
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
@@ -304,7 +303,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         }
 
         bestParams.N = Math.round(bestParams.N);
-        setParams(bestParams);
+        setParams(bestParams); // Rc sẽ tự động được tính lại và update bởi useEffect
         setIsFitting(false);
     }, 100);
   };
@@ -318,7 +317,9 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     try {
         const simPeak = Math.max(...chartData.map(d => d.sim_I || 0));
         const realPeak = realData.length > 0 ? Math.max(...realData.map(d => d.real_I)) : 0;
-        const res = await analyzeRShieldSimulation(topic, params, realData, simPeak, realPeak, lang);
+        // Sử dụng calculatedRc để đảm bảo giá trị mới nhất, 
+        // hoặc params.Rc (lúc này đã được sync bởi useEffect)
+        const res = await analyzeRShieldSimulation(topic, params, realData, simPeak, realPeak, lang, calculatedRc);
         setAnalysisResult(res);
     } catch (e: any) { setAnalysisResult("Error: " + e.message); }
     finally { setIsAnalyzing(false); }
@@ -484,21 +485,21 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                  </div>
              ))}
         </div>
-      </div>
 
-      {/* --- MOVED EXPERT VIEW HERE TO SPAN FULL WIDTH --- */}
-      {analysisResult && (
-        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl">
-            <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
-                <MessageSquare className="text-white" size={20} />
-                <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.expertView}</h3>
+        {/* --- MOVED EXPERT VIEW HERE TO SPAN FULL WIDTH --- */}
+        {analysisResult && (
+            <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl">
+                <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
+                    <MessageSquare className="text-white" size={20} />
+                    <h3 className="text-lg font-bold text-white uppercase tracking-wider">{t.expertView}</h3>
+                </div>
+                <div 
+                    className="p-8 text-gray-800 leading-relaxed font-sans text-sm md:text-base max-h-[800px] overflow-y-auto prose prose-indigo max-w-none"
+                    dangerouslySetInnerHTML={getMarkdownHtml(analysisResult)}
+                />
             </div>
-            <div 
-                className="p-8 text-gray-800 leading-relaxed font-sans text-sm md:text-base max-h-[800px] overflow-y-auto prose prose-indigo max-w-none"
-                dangerouslySetInnerHTML={getMarkdownHtml(analysisResult)}
-            />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
