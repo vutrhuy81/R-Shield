@@ -108,7 +108,13 @@ export const analyzeRShieldSimulation = async (
       * **$u_g$ (Correction - Counter-narrative)**: ${params.ug} with Efficiency $\rho$ = ${params.rho}. (Measures: Effectiveness of fact-checking acting on Exposed).
       * **$v$ (Suppression - Technical)**: ${params.v}. (Measures: Blocking, filtering, removing content acting on Infected).
 
-      **3. Comparative Data:**
+      **3. Key Indicator ($R_c$ - Reproduction Number under Control):**
+      * **Current $R_c$**: ${params.Rc}.
+      * **Interpretation Rule**: 
+        - If $R_c \le 1$: The rumor is well-controlled.
+        - If $R_c > 1$: High risk of outbreak, difficult to control.
+
+      **4. Comparative Data:**
       * Real Peak: ${realPeak} | Simulated Peak: ${simulatedPeak}.
 
       **REQUEST FOR EXPERT ANALYSIS:**
