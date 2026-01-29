@@ -16,7 +16,7 @@ export const translations = {
     apiKeyWarning: "Chưa tìm thấy API Key. Vui lòng thiết lập biến môi trường API_KEY.",
     exploreTrends: "Khám phá xu hướng tìm kiếm",
     dataSource: "Nguồn dữ liệu",
-    geminiAi: "Gemini AI",
+    geminiAi: "Model AI",
     googleTrends: "Google Trends",
     location: "Khu vực",
     searchType: "Loại tìm kiếm",
