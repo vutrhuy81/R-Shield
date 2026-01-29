@@ -85,7 +85,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono text-indigo-800">
                     <div className="bg-white p-2 rounded border border-indigo-100">Beta (β): {isVi ? 'Lây nhiễm' : 'Infection'}</div>
-                    <div className="bg-white p-2 rounded border border-indigo-100">Alpha (α): {isVi ? 'Ủ tin' : 'Incubation'}</div>
+                    <div className="bg-white p-2 rounded border border-indigo-100">Alpha (α): {isVi ? 'Tốc độ lan tin' : 'Incubation'}</div>
                     <div className="bg-white p-2 rounded border border-indigo-100">Gamma (γ): {isVi ? 'Hồi phục' : 'Recovery'}</div>
                     <div className="bg-white p-2 rounded border border-indigo-100">Tau (τ): {isVi ? 'Độ trễ' : 'Time Delay'}</div>
                 </div>
