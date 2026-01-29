@@ -123,7 +123,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                         <li><b className="text-red-600">Intervention Day:</b> {isVi ? 'Ngày bắt đầu kích hoạt.' : 'Start day.'}</li>
                         <li><b className="font-mono">u_p:</b> {isVi ? 'Giáo dục/Phòng ngừa (Giảm S).' : 'Prevention (Reduce S).'}</li>
                         <li><b className="font-mono">u_g & rho:</b> {isVi ? 'Phản bác tin giả (Truth Sandwich)-Ngăn chặn E --> I.' : 'Counter-narrative-Reduce E --> I.'}</li>
-                        <li><b className="font-mono">v (nu):</b> {isVi ? 'Biện pháp kỹ thuật/Chặn (Giảm I).' : 'Technical blocking.'}</li>
+                        <li><b className="font-mono">v:</b> {isVi ? 'Biện pháp kỹ thuật/Chặn (Giảm I).' : 'Technical blocking.'}</li>
                     </ul>
                 </div>
 
@@ -135,7 +135,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                     </div>
                     <p className="text-xs text-red-800 leading-relaxed">
                         {isVi 
-                         ? 'Chỉ số Rc (Reproduction under Control) cho biết dịch tin giả có đang bùng phát (>1) hay được kiểm soát (≤1).'
+                         ? 'Chỉ số Rc (Ngưỡng) cho biết dịch tin giả có đang bùng phát (>1) hay được kiểm soát (≤1).'
                          : 'Rc Index indicates if the rumor is spreading (>1) or under control (≤1).'}
                     </p>
                     <div className="mt-auto bg-white p-2 rounded-lg border border-red-100 text-xs text-gray-600 flex items-center gap-2">
