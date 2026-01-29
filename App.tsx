@@ -104,7 +104,8 @@ const App: React.FC = () => {
 
     if (dataSource === 'GOOGLE_TRENDS') {
         const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
-        const url = `https://trends.google.com/trends/explore?date=${startDate}%20${endDate}&geo=${geoLocation}&q=${termStrings}`;
+        // Sửa đường dẫn thành /explore và đưa tham số q lên đầu
+        const url = `https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`;
         window.open(url, '_blank');
         return;
     }
