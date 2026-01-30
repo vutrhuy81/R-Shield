@@ -1,13 +1,21 @@
-
 export interface TrendDataPoint {
   date: string;
   [key: string]: string | number;
 }
 
+// [UPDATED] Interface cho từng mục trong Checklist
+export interface ChecklistItem {
+  sign: string;
+  detected: boolean;
+  reason: string;
+}
+
+// [UPDATED] Interface phản hồi từ API Gemini, bao gồm checklist
 export interface TrendAnalysisResponse {
   data: TrendDataPoint[];
   summary: string;
   groundingMetadata?: any;
+  checklist?: ChecklistItem[]; // Trường chứa dữ liệu checklist
 }
 
 export interface SearchTerm {
