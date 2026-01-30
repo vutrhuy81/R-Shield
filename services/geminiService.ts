@@ -50,6 +50,14 @@ export const fetchTrendData = async (
        - 'data' must contain exactly one entry per day for the requested range.       
        - Display the conclusion: whether this search result is fake news or not.
        - Always display resource links to reputable news websites for reference if the search result is not fake news.
+    5. **Rumor Checklist Analysis (MANDATORY)**:
+       Analyze the query topic based on these 5 signs of school rumors. Return a boolean (true if sign is present) and a short reasoning.
+       
+       - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources?
+       - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? Just screenshots/hearsay?
+       - **Sign 3: Urgency/Pushy (Ngôn ngữ thúc ép)**: Words like "Share now", "Don't tell anyone", "100% true"?
+       - **Sign 4: Emotional Trigger (Cảm xúc mạnh)**: Does it provoke fear, anger, or extreme curiosity?
+       - **Sign 5: Procedural Inconsistency (Sai quy trình)**: Does it contradict normal school protocols (e.g., discipline announced via rumors instead of official channels)?
 
     Output JSON Format:
     {
@@ -57,7 +65,14 @@ export const fetchTrendData = async (
         { "date": "YYYY-MM-DD", "${terms[0]}": 12, ... },
         ...
       ],
-      "summary": "Detailed analysis identifying specific events. Format: [Date] - [Event Name] ([Verification Status]): Description of the event and why it drove the trend."
+      "summary": "Detailed analysis identifying specific events. Format: [Date] - [Event Name] ([Verification Status]): Description of the event and why it drove the trend.",
+      "checklist": [
+         { "sign": "Nguồn thông tin mơ hồ", "detected": boolean, "reason": "Short explanation in Vietnamese" },
+         { "sign": "Thiếu bằng chứng kiểm chứng được", "detected": boolean, "reason": "..." },
+         { "sign": "Ngôn ngữ thúc ép hoặc khẩn cấp", "detected": boolean, "reason": "..." },
+         { "sign": "Kích hoạt cảm xúc mạnh", "detected": boolean, "reason": "..." },
+         { "sign": "Chưa phù hợp với quy trình nhà trường", "detected": boolean, "reason": "..." }
+      ]
     }
   `;
 
@@ -78,6 +93,7 @@ export const fetchTrendData = async (
     return { 
         data: result.data, 
         summary: result.summary, 
+        checklist: result.checklist,
         groundingMetadata: response.candidates?.[0]?.groundingMetadata 
     } as TrendAnalysisResponse;
 
