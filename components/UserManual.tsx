@@ -166,7 +166,7 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
           {/* 5. VÍ DỤ MINH HỌA CHECKLIST */}
           <section className="space-y-6">
             <h4 className="text-emerald-700 font-bold flex items-center gap-2 uppercase text-sm tracking-widest border-l-4 border-emerald-600 pl-3">
-              <FileText size={18} /> {isVi ? '5. Ví dụ Thực tế & Kết quả Checklist' : '5. Real Examples & Checklist Results'}
+              <FileText size={18} /> {isVi ? '5. Ví dụ Checklist nhận diện tin đồn' : '5. Checklist for identifying rumors.'}
             </h4>
             
             <div className="ml-2 space-y-6">
