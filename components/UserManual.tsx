@@ -195,6 +195,13 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                                         {isVi ? 'Nguồn tin mơ hồ' : 'Vague Source'}
                                     </span>
                                     <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{isVi ? 'AN TOÀN' : 'SAFE'}</span>
+                                </div>                                
+                                <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
+                                    <span className="text-gray-600 flex gap-1">
+                                        <CheckCircle2 size={14} className="text-gray-400"/> 
+                                        {isVi ? 'Thiếu bằng chứng kiểm chứng được' : 'Lack of Evidence'}
+                                    </span>
+                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{isVi ? 'AN TOÀN' : 'SAFE'}</span>
                                 </div>
                                 <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
                                     <span className="text-red-700 font-medium flex gap-1">
@@ -209,13 +216,6 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                                         {isVi ? 'Kích hoạt cảm xúc mạnh' : 'Strong Emotional Trigger'}
                                     </span>
                                     <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">{isVi ? 'PHÁT HIỆN' : 'DETECTED'}</span>
-                                </div>
-                                <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
-                                    <span className="text-gray-600 flex gap-1">
-                                        <CheckCircle2 size={14} className="text-gray-400"/> 
-                                        {isVi ? 'Thiếu bằng chứng kiểm chứng được' : 'Lack of Evidence'}
-                                    </span>
-                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{isVi ? 'AN TOÀN' : 'SAFE'}</span>
                                 </div>
                                 <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
                                     <span className="text-gray-600 flex gap-1">
