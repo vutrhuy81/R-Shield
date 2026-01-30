@@ -123,6 +123,8 @@ const App: React.FC = () => {
       setSummary(response.summary);
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
+      // [QUAN TRỌNG] Trả về response để TagInput có thể nhận được dữ liệu checklist
+      return response; 
     } catch (error: any) {
       setLoadingState(LoadingState.ERROR);
       setErrorMessage(error.message || "Error");
