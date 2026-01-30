@@ -1,7 +1,7 @@
 import React from 'react';
 import { translations } from '../translations';
 import { Language } from '../types';
-import { X, Database, ShieldCheck, Sparkles, Activity, BookOpen, Wand2, ShieldAlert, MessageSquare, Target, Search, Settings } from 'lucide-react';
+import { X, Database, ShieldCheck, Sparkles, Activity, BookOpen, Wand2, ShieldAlert, MessageSquare, Target, Search, Settings, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface UserManualProps {
   isOpen: boolean;
@@ -162,6 +162,104 @@ const UserManual: React.FC<UserManualProps> = ({ isOpen, onClose, lang }) => {
                </p>
             </div>
           </section>
+
+          {/* 5. VÍ DỤ MINH HỌA CHECKLIST */}
+          <section className="space-y-6">
+            <h4 className="text-emerald-700 font-bold flex items-center gap-2 uppercase text-sm tracking-widest border-l-4 border-emerald-600 pl-3">
+              <FileText size={18} /> {isVi ? '5. Ví dụ Thực tế & Kết quả Checklist' : '5. Real Examples & Checklist Results'}
+            </h4>
+            
+            <div className="ml-2 space-y-6">
+                
+                {/* Ví dụ 1 */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="bg-amber-50 px-4 py-3 border-b border-amber-100 flex justify-between items-center">
+                        <h5 className="font-bold text-amber-900 text-sm">{isVi ? 'Ví dụ 1: Tin đồn học sinh bị đâm' : 'Ex 1: Student Stabbing Rumor'}</h5>
+                        <span className="text-[10px] font-mono text-gray-500">16/12/2025</span>
+                    </div>
+                    <div className="p-4">
+                        <p className="text-sm text-gray-700 mb-4 italic">
+                             "{isVi ? 'Một nữ sinh lớp 8 tại Ninh Bình bị bạn đâm...' : 'An 8th-grade student in Ninh Binh was stabbed...'}"
+                        </p>
+                        
+                        {/* Mô phỏng UI Checklist 1 */}
+                        <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-3">
+                                <AlertTriangle size={18} className="text-amber-500" />
+                                <span className="text-sm font-bold text-amber-700 uppercase">{isVi ? 'Rủi ro: TRUNG BÌNH (Medium)' : 'Risk: MEDIUM'}</span>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
+                                    <span className="text-gray-600 flex gap-1"><CheckCircle2 size={14} className="text-gray-400"/> Nguồn tin mơ hồ</span>
+                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">AN TOÀN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/>Ngôn ngữ thúc ép hoặc khẩn cấp</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Kích hoạt cảm xúc mạnh</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
+                                    <span className="text-gray-600 flex gap-1"><CheckCircle2 size={14} className="text-gray-400"/> Kích hoạt cảm xúc mạnh</span>
+                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">AN TOÀN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-white rounded border border-gray-100">
+                                    <span className="text-gray-600 flex gap-1"><CheckCircle2 size={14} className="text-gray-400"/> Chưa phù hợp với qui trình nhà trường</span>
+                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">AN TOÀN</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Ví dụ 2 */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="bg-red-50 px-4 py-3 border-b border-red-100 flex justify-between items-center">
+                        <h5 className="font-bold text-red-900 text-sm">{isVi ? 'Ví dụ 2: Vụ án Lạng Sơn' : 'Ex 2: Lang Son Case'}</h5>
+                        <span className="text-[10px] font-mono text-gray-500">29/11/2025</span>
+                    </div>
+                    <div className="p-4">
+                        <p className="text-sm text-gray-700 mb-4 italic">
+                             "{isVi ? 'Thông tin vụ án Lạng Sơn...' : 'Information regarding the Lang Son case...'}"
+                        </p>
+                        
+                        {/* Mô phỏng UI Checklist 2 */}
+                        <div className="border border-red-200 bg-red-50/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-3">
+                                <AlertTriangle size={18} className="text-red-600 animate-pulse" />
+                                <span className="text-sm font-bold text-red-700 uppercase">{isVi ? 'Rủi ro: CAO (High)' : 'Risk: HIGH'}</span>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Nguồn tin mơ hồ</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>                                
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Thiếu bằng chứng</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Ngôn ngữ thúc ép hoặc khẩn cấp</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Kích hoạt cảm xúc mạnh</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-red-50 rounded border border-red-100">
+                                    <span className="text-red-700 font-medium flex gap-1"><AlertTriangle size={14}/> Chưa phù hợp với qui trình nhà trường</span>
+                                    <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">PHÁT HIỆN</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+          </section>
+
         </div>
 
         {/* Footer */}
