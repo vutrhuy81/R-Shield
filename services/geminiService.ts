@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { TrendDataPoint, TrendAnalysisResponse, SearchType, Language } from "../types";
 
@@ -17,11 +18,12 @@ export const fetchTrendData = async (
   if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
   const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
   const diffDays = Math.ceil(Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
+  const targetLang = lang === 'vi' ? 'Vietnamese' : 'English';
   
   // --- UPDATED PROMPT: Logic mô phỏng thực tế ---
   const prompt = `
     Role: Google Trends Data Simulator (R-Shield System).
-    Language for the 'summary' field: ${lang === 'vi' ? 'Vietnamese' : 'English'}.
+    CRITICAL: YOU MUST RESPOND ALL TEXT FIELDS IN ${targetLang.toUpperCase()}.
     Task: Generate daily search interest index (0-100) for terms: "${terms.join(', ')}".
     Config: Geo: ${geoCode}, Type: ${searchType}, Range: ${startDate} to ${endDate} (${diffDays} days).
     
@@ -39,19 +41,20 @@ export const fetchTrendData = async (
        - For every major event identified in step 1, apply a verification logic:
          a. **Cross-Check Sources**: Do reputable/mainstream media outlets report this, or only social media/tabloids?
          b. **Official Statements**: Is there a confirmation from authorities (police, government, institutions)?
-         c. **Classification**: Label the event driving the trend as one of the following:
-            - [TIN ĐÃ KIỂM CHỨNG]: Confirmed by multiple reliable sources/authorities.
-            - [TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG]: Viral but lacks official confirmation or reliable sources.
-            - [TIN GIẢ/ĐÃ BỊ BÁC BỎ]: Proven false or miscontextualized information.
+         c. **Classification Labels in ${targetLang}**: Label the event driving the trend as one of the following:
+            - [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}]
+            - [${lang === 'vi' ? 'TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG' : 'UNVERIFIED RUMOR'}]
+            - [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}]
 
     4. **Output Requirement**:
        - Provide a strictly valid JSON object.
-       - The 'summary' must explicitly mention the specific real-world events found AND their verification status.
+       - The 'summary' must explicitly mention the specific real-world events found AND their verification status in ${targetLang}.
        - 'data' must contain exactly one entry per day for the requested range.       
-       - Display the conclusion: whether this search result is fake news or not.
+       - Display the conclusion: whether this search result is fake news or not in ${targetLang}..
        - Always display resource links to reputable news websites for reference if the search result is not fake news.
     5. **Rumor Checklist Analysis (MANDATORY)**:
        Analyze the query topic based on these 5 signs of school rumors. Return a boolean (true if sign is present) and a short reasoning.
+       CRITICAL: The 'reason' field for each item MUST be in ${targetLang}.
        
        - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources?
        - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? Just screenshots/hearsay?
@@ -67,11 +70,11 @@ export const fetchTrendData = async (
       ],
       "summary": "Detailed analysis identifying specific events. Format: [Date] - [Event Name] ([Verification Status]): Description of the event and why it drove the trend.",
       "checklist": [
-         { "sign": "Nguồn thông tin mơ hồ", "detected": boolean, "reason": "Short explanation in Vietnamese" },
-         { "sign": "Thiếu bằng chứng kiểm chứng được", "detected": boolean, "reason": "..." },
-         { "sign": "Ngôn ngữ thúc ép hoặc khẩn cấp", "detected": boolean, "reason": "..." },
-         { "sign": "Kích hoạt cảm xúc mạnh", "detected": boolean, "reason": "..." },
-         { "sign": "Chưa phù hợp với quy trình nhà trường", "detected": boolean, "reason": "..." }
+         { "sign": "${lang === 'vi' ? 'Nguồn thông tin mơ hồ' : 'Vague Source'}", "detected": boolean, "reason": "Reason in ${targetLang}" },
+         { "sign": "${lang === 'vi' ? 'Thiếu bằng chứng kiểm chứng được' : 'Lack of Verifiable Evidence'}", "detected": boolean, "reason": "Reason in ${targetLang}" },
+         { "sign": "${lang === 'vi' ? 'Ngôn ngữ thúc ép hoặc khẩn cấp' : 'Urgent or Pushy Language'}", "detected": boolean, "reason": "Reason in ${targetLang}" },
+         { "sign": "${lang === 'vi' ? 'Kích hoạt cảm xúc mạnh' : 'Strong Emotional Trigger'}", "detected": boolean, "reason": "Reason in ${targetLang}" },
+         { "sign": "${lang === 'vi' ? 'Chưa phù hợp với quy trình nhà trường' : 'Inconsistent with School Protocol'}", "detected": boolean, "reason": "Reason in ${targetLang}" }
       ]
     }
   `;
@@ -109,9 +112,10 @@ export const analyzeRShieldSimulation = async (
     // --- UPDATED PROMPT: Chuyên gia Khoa học Xã hội & Liên ngành ---
     const prompt = `
       You are a leading **Expert in Social Behavioral Science and Interdisciplinary Science** acting as a Strategic Advisor for the R-Shield System.
+      CRITICAL: YOU MUST PROVIDE THE ENTIRE ANALYSIS IN ${targetLang.toUpperCase()}.
       
       **Context**: You are analyzing a mathematically modeled rumor propagation scenario (SEIR with Time Delay & Multi-channel Control).
-      **Language**: Respond in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
+      **Language for Output**: ${targetLang}.
       **Case Topic**: "${topic}".
 
       **1. Mathematical Model Parameters (The Evidence):**
@@ -134,7 +138,7 @@ export const analyzeRShieldSimulation = async (
       * Real Peak: ${realPeak} | Simulated Peak: ${simulatedPeak}.
 
       **REQUEST FOR EXPERT ANALYSIS:**
-      Please provide a comprehensive report in Markdown format covering:
+      Please provide a comprehensive report in Markdown format in ${targetLang} covering:
 
       1.  **System Dynamics Diagnosis**: 
           * Analyze how the **Time Delay ($\tau$)** is affecting the spread. Does the delay in information verification lead to a larger outbreak before controls kick in?
@@ -149,7 +153,7 @@ export const analyzeRShieldSimulation = async (
           * **Communication Science**: Specific messaging strategies to improve $\rho$ (e.g., speed of truth vs. viral lies).
           * **Policy/Tech**: How to optimize the timing ($interventionDay$) relative to the delay ($\tau$).
 
-      *Tone: Professional, Insightful, Strategic, and scientifically grounded.*
+      *Tone: Professional, Insightful, Strategic, and scientifically grounded in ${targetLang}.*
     `;
 
     try {
