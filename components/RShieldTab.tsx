@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
 import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2, Target } from 'lucide-react';
@@ -245,7 +246,8 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     if (realData.length < 3) return;
 
     setIsFitting(true);
-    
+
+    // Sử dụng setTimeout để không block UI render
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
