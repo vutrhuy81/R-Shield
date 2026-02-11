@@ -10,6 +10,7 @@ import EstimatedReachTable from './components/EstimatedReachTable';
 import RShieldTab from './components/RShieldTab';
 import LoginPage from './components/LoginPage';
 import UserManual from './components/UserManual';
+import QAModal from './components/QAModal';
 import { fetchTrendData } from './services/geminiService';
 import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe } from 'lucide-react';
 import { marked } from 'marked';
@@ -23,6 +24,7 @@ const App: React.FC = () => {
   // --- App State ---
   const [activeTab, setActiveTab] = useState<'DATA' | 'R_SHIELD'>('DATA');
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isQAOpen, setIsQAOpen] = useState(false);
 
   // --- Data Collection State ---
   const [terms, setTerms] = useState<SearchTerm[]>([]);
@@ -96,11 +98,16 @@ const App: React.FC = () => {
 
   const handleRemoveTerm = (id: string) => setTerms(terms.filter(t => t.id !== id));
 
-  const handleAnalyze = async () => {
+  // --- [IMPORTANT] Cập nhật hàm handleAnalyze để trả về Response ---
+  const handleAnalyze = async (): Promise<TrendAnalysisResponse | undefined> => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    if (start > end) { setErrorMessage(t.dateError); setLoadingState(LoadingState.ERROR); return; }
+    if (start > end) { 
+        setErrorMessage(t.dateError); 
+        setLoadingState(LoadingState.ERROR); 
+        return; 
+    }
 
     if (dataSource === 'GOOGLE_TRENDS') {
         const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
@@ -119,15 +126,20 @@ const App: React.FC = () => {
     try {
       const termStrings = terms.map(term => term.term);
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
+
+      // Update local state for App visualization
       setData(response.data);
       setSummary(response.summary);
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
+      
       // [QUAN TRỌNG] Trả về response để TagInput có thể nhận được dữ liệu checklist
       return response; 
+      
     } catch (error: any) {
       setLoadingState(LoadingState.ERROR);
       setErrorMessage(error.message || "Error");
+      throw error;
     }
   };
 
@@ -149,6 +161,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8F9FA] pb-20">
       <UserManual isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} lang={lang} />
+      <QAModal isOpen={isQAOpen} onClose={() => setIsQAOpen(false)} lang={lang} />
       
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -167,13 +180,22 @@ const App: React.FC = () => {
               <Globe size={14} />
               {lang.toUpperCase()}
             </button>
-            <button 
-              onClick={() => setIsManualOpen(true)}
-              className="hidden md:flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors text-sm font-medium"
-            >
-              <HelpCircle size={18} />
-              {t.manual}
-            </button>
+            <div className="hidden md:flex items-center gap-4">
+              <button 
+                onClick={() => setIsManualOpen(true)}
+                className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors text-sm font-medium"
+              >
+                <HelpCircle size={18} />
+                {t.manual}
+              </button>
+              <button 
+                onClick={() => setIsQAOpen(true)}
+                className="flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors text-sm font-medium"
+              >
+                <MessageCircleQuestion size={18} />
+                {t.qa}
+              </button>
+            </div>
             <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
             <div className="flex items-center gap-3">
                <div className="flex flex-col items-end">
@@ -224,6 +246,7 @@ const App: React.FC = () => {
 
         {activeTab === 'DATA' && user.role === 'ADMIN' ? (
             <div className="space-y-6">
+                {/* TagInput nhận prop onAnalyze trả về Promise */}
                 <TagInput 
                   terms={terms} onAddTerm={handleAddTerm} onRemoveTerm={handleRemoveTerm} onAnalyze={handleAnalyze} isLoading={loadingState === LoadingState.LOADING}
                   startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate}
@@ -272,7 +295,12 @@ const App: React.FC = () => {
             <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
         )}
       </main>
-      <button onClick={() => setIsManualOpen(true)} className="fixed bottom-6 right-6 md:hidden bg-blue-600 text-white p-4 rounded-full shadow-2xl z-40"><HelpCircle size={24} /></button>
+      
+      {/* Floating Action Buttons for Mobile */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
+        <button onClick={() => setIsManualOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-2xl"><HelpCircle size={24} /></button>
+        <button onClick={() => setIsQAOpen(true)} className="bg-indigo-600 text-white p-4 rounded-full shadow-2xl"><MessageCircleQuestion size={24} /></button>
+      </div>
     </div>
   );
 };
