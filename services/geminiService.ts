@@ -108,6 +108,7 @@ export const analyzeRShieldSimulation = async (
 ): Promise<string> => {
     if (!import.meta.env.VITE_API_KEY) throw new Error("API Key missing");
     const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    const targetLang = lang === 'vi' ? 'Vietnamese' : 'English';
     
     // --- UPDATED PROMPT: Chuyên gia Khoa học Xã hội & Liên ngành ---
     const prompt = `
