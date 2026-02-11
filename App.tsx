@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language } from './types';
+import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language, TrendAnalysisResponse } from './types';
 import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
 import { translations } from './translations';
 import TagInput from './components/TagInput';
@@ -11,7 +12,7 @@ import LoginPage from './components/LoginPage';
 import UserManual from './components/UserManual';
 import QAModal from './components/QAModal';
 import { fetchTrendData } from './services/geminiService';
-import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe } from 'lucide-react';
+import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe, MessageCircleQuestion } from 'lucide-react';
 import { marked } from 'marked';
 
 const App: React.FC = () => {
