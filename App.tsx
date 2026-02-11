@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language } from './types';
 import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
