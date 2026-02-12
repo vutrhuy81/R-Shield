@@ -20,6 +20,7 @@ const QAModal: React.FC<QAModalProps> = ({ isOpen, onClose, lang }) => {
     { title: t.qa_sec3, start: 15, end: 22 },
     { title: t.qa_sec4, start: 23, end: 27 },
     { title: t.qa_sec5, start: 28, end: 30 },
+    { title: t.qa_sec6, start: 31, end: 33 }
   ];
 
   return (
