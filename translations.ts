@@ -177,6 +177,12 @@ export const translations = {
     a29: "Tích hợp dữ liệu group chat, dashboard cảnh báo thời gian thực.",
     q30: "Nếu làm lại, bạn sẽ cải tiến gì?",
     a30: "Thu thập dữ liệu dọc theo thời gian và thử nghiệm can thiệp thực tế.",
+    q31: "Khi HS tiếp cận thông tin (mạng xã hội và truyền miệng) làm sao biết đó là tin đồn?",
+    a31: "Theo nghiên cứu, tin đồn được nhận diện là thông tin chưa được kiểm chứng, thiếu nguồn chính thống, xuất hiện trong bối cảnh bất định cao và kích hoạt cảm xúc mạnh. Báo cáo đề xuất Checklist 5 dấu hiệu nhận diện tin đồn: (1) Nguồn mơ hồ (“nghe nói”, “bạn mình bảo”); (2) Thiếu bằng chứng kiểm chứng được; (3) Ngôn ngữ thúc ép, khẩn cấp; (4) Kích hoạt cảm xúc mạnh; (5) Không phù hợp quy trình thông báo của nhà trường. Nếu thông tin thỏa ≥2/5 dấu hiệu → học sinh chuyển sang trạng thái do dự (E) và áp dụng quy tắc “tạm dừng chia sẻ”.",
+    q32: "Trình bày cơ sở lý thuyết chính về tin đồn của nghiên cứu?",
+    a32: "Nghiên cứu dựa trên 3 nền tảng lý thuyết: (1) Tâm lý học tin đồn (Rumor psychology – DiFonzo & Bordia): Tin đồn xuất hiện khi bất định cao + cảm xúc bị kích hoạt; (2) Mô hình lan truyền dịch tễ (Daley–Kendall, SEIR): Xem tin đồn như quá trình lan truyền tương tự dịch bệnh; (3) Lý thuyết ra quyết định hành vi – xã hội: Học sinh không thụ động mà trải qua giai đoạn do dự, chịu ảnh hưởng của cảm xúc, áp lực đồng đẳng và niềm tin. Điểm mới: tái diễn giải trạng thái Exposed (E) thành giai đoạn do dự hành vi có thể can thiệp, không chỉ là độ trễ kỹ thuật.",
+    q33: "Mô hình can thiệp sẽ dựa trên những biến chính nào để khi chọn mô hình phải dựa vào đây thì mới lý giải được vì sao mô hình có tính khả thi?",
+    a33: "Mô hình R-SHIELD dựa trên ba nhóm biến cốt lõi: (1) Thời gian tiếp cận và phản ứng (τ) → Can thiệp trong “12 giờ vàng”; (2) Mindset và hành vi học sinh (E → I) → Tác động vào xác suất chuyển từ do dự sang lan truyền → Tăng ug(t) và hệ số tiếp nhận ρ để kéo Rc < 1; (3) Môi trường nhà trường (giáo dục nền, prebunking) → Tăng up, giảm β dài hạn, giảm cảm nhiễm ban đầu s0. Tính khả thi được chứng minh bằng: (1) Dữ liệu 3.691 học sinh; (2) Khoảng 60% sẵn sàng dừng chia sẻ khi có thông tin chính thống kịp thời; (3) Mô phỏng cho thấy Rc từ 3,88 giảm xuống ≈0,75 khi can thiệp sớm",
   },
   en: {
     appTitle: "R-Shield: Rumor Shield System",
@@ -356,5 +362,11 @@ export const translations = {
     a29: "Integrating group chat data and real-time warning dashboards.",
     q30: "What would you improve if starting over?",
     a30: "Collecting longitudinal data and testing real-world interventions.",
+    q31: "When students encounter information (via social media or word of mouth), how can they identify it as a rumor?",
+    a31: "According to the study, a rumor is defined as information that is unverified, lacks an official source, appears in high-uncertainty contexts, and triggers strong emotions. The report proposes a 5-indicator checklist to identify rumors: (1) Vague source (“heard that…”, “a friend said…”); (2) No verifiable evidence; (3) Urgent or emotionally charged language; (4) Strong emotional activation; (5) Inconsistency with official school communication procedures. If the information meets at least 2 out of 5 indicators, students should move into the hesitation state (E) and apply the rule: “pause before sharing.”",
+    q32: "What is the main theoretical foundation of the study on rumors?",
+    a32: "The research is grounded in three main theoretical frameworks: (1) Rumor psychology (DiFonzo & Bordia): Rumors emerge under high uncertainty and emotional activation; (2) Epidemiological diffusion models (Daley–Kendall, SEIR): Rumor spreading is modeled analogously to infectious disease transmission; (3) Behavioral–social decision theory: Students are not passive; they go through a hesitation phase influenced by emotions, peer pressure, and trust; The key innovation is redefining Exposed (E) as a behavioral hesitation stage that can be actively intervened in, rather than a purely technical delay.",
+    q33: "Which key variables does the intervention model rely on to justify its feasibility?",
+    a33: "The R-SHIELD model is based on three core variable groups: (1) Response timing (τ) → Early intervention within the “12 golden hours.”; (2) Student mindset and behavior (E → I transition) → Increasing intervention intensity (u_g) and receptivity (ρ) to reduce Rc below 1; (3) School environment (prebunking/education) → Increasing u_p to reduce susceptibility (s₀) in the long term. Feasibility is supported by: (1) Data from 3,691 students; (2) ~60% willing to stop sharing when receiving timely official information; (3) Simulations showing Rc reduced from 3.88 to ~0.75 with early intervention.",
   }
 };
