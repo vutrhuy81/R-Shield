@@ -116,6 +116,7 @@ export const translations = {
     qa_sec3: "III. Câu hỏi về mô hình & tham số",
     qa_sec4: "IV. Câu hỏi về kết quả & ý nghĩa",
     qa_sec5: "V. Câu hỏi về hạn chế & phát triển",
+    qa_sec6: "VI. Những nội dung quan trọng",
     
     q1: "Vì sao bạn chọn tin đồn học đường làm đối tượng nghiên cứu?",
     a1: "Vì tin đồn gây hậu quả tâm lý – xã hội nghiêm trọng nhưng chưa có mô hình định lượng để can thiệp sớm.",
@@ -300,6 +301,7 @@ export const translations = {
     qa_sec3: "III. Model & Parameters",
     qa_sec4: "IV. Results & Significance",
     qa_sec5: "V. Limitations & Development",
+    qa_sec6: "VI. Key content",
     
     q1: "Why did you choose school rumors as your research subject?",
     a1: "Because rumors cause serious socio-psychological consequences but lacked quantitative models for early intervention.",
