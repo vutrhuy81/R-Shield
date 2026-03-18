@@ -103,10 +103,19 @@ const App: React.FC = () => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     if (start > end) { 
         setErrorMessage(t.dateError); 
         setLoadingState(LoadingState.ERROR); 
         return; 
+    }
+
+    if (start > today || end > today) {
+        setErrorMessage(t.futureDateError);
+        setLoadingState(LoadingState.ERROR);
+        return;
     }
 
     if (dataSource === 'GOOGLE_TRENDS') {
