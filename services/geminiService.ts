@@ -113,48 +113,34 @@ export const analyzeRShieldSimulation = async (
     // --- UPDATED PROMPT: Chuyên gia Khoa học Xã hội & Liên ngành ---
     const prompt = `
       You are a leading **Expert in Social Behavioral Science and Interdisciplinary Science** acting as a Strategic Advisor for the R-Shield System.
+      
       CRITICAL: YOU MUST PROVIDE THE ENTIRE ANALYSIS IN ${targetLang.toUpperCase()}.
       
       **Context**: You are analyzing a mathematically modeled rumor propagation scenario (SEIR with Time Delay & Multi-channel Control).
       **Language for Output**: ${targetLang}.
       **Case Topic**: "${topic}".
 
-      **1. Mathematical Model Parameters (The Evidence):**
-      * **$\tau$ (Time Delay)**: ${params.tau} days. (Represents the latency in information verification or the psychological gap between exposure and reaction).
-      * **$R_0$ Factors**: Beta (Infection) = ${params.beta}, Alpha (Incubation) = ${params.alpha}, Gamma (Recovery/Loss of Interest) = ${params.gamma}.
-      * **Population (N)**: ${params.N}.
-      
-      **2. Intervention Strategy (Started on Day ${params.interventionDay}):**
-      * **$u_p$ (Prevention - Education/Legal)**: ${params.up}. (Measures: Immunity building, legal deterrence acting on Susceptible).
-      * **$u_g$ (Correction - Counter-narrative)**: ${params.ug} with Efficiency $\rho$ = ${params.rho}. (Measures: Effectiveness of fact-checking acting on Exposed).
-      * **$v$ (Suppression - Technical)**: ${params.v}. (Measures: Blocking, filtering, removing content acting on Infected).
-
-      **3. Key Indicator ($R_c$ - Reproduction Number under Control):**
+      **Model Parameters & Evidence:**
+      * **$\tau$ (Time Delay)**: ${params.tau} days.
+      * **$R_0$ Factors**: Beta = ${params.beta}, Alpha = ${params.alpha}, Gamma = ${params.gamma}.
+      * **Intervention (Day ${params.interventionDay})**: $u_p$=${params.up}, $u_g$=${params.ug} ($\rho$=${params.rho}), $v$=${params.v}.
       * **Current $R_c$**: ${params.Rc}.
-      * **Interpretation Rule**: 
-        - If $R_c \le 1$: The rumor is well-controlled.
-        - If $R_c > 1$: High risk of outbreak, difficult to control.
-
-      **4. Comparative Data:**
-      * Real Peak: ${realPeak} | Simulated Peak: ${simulatedPeak}.
+      * **Data**: Real Peak: ${realPeak} | Simulated Peak: ${simulatedPeak}.
 
       **REQUEST FOR EXPERT ANALYSIS:**
-      Please provide a comprehensive report in Markdown format in ${targetLang} covering:
+      Please provide a concise, high-impact report in Markdown format in ${targetLang} with the following structure:
 
-      1.  **System Dynamics Diagnosis**: 
-          * Analyze how the **Time Delay ($\tau$)** is affecting the spread. Does the delay in information verification lead to a larger outbreak before controls kick in?
-          * Evaluate the basic reproduction of the rumor based on Beta/Gamma.
+      1. **HÀNH ĐỘNG KHẨN CẤP (Immediate Action Plan)**: 
+         - List 3-5 specific, actionable steps that must be taken IMMEDIATELY based on the current parameters (especially $\tau$ and $R_c$).
+         - Focus on "What to do" rather than "Why".
+         - Use bold text for key actions.
 
-      2.  **Intervention Strategy Audit**:
-          * Critique the balance of the current strategy. Are we relying too much on "Hard Power" (Technical Blocking $v$) vs. "Soft Power" (Education $u_p$ & Correction $u_g$)?
-          * Assess the "Correction Efficiency" ($\rho * u_g$). Is the counter-narrative strong enough to convert 'Exposed' individuals?
+      2. **PHÂN TÍCH CHI TIẾT (Detailed Analysis)**:
+         - Wrap this entire section inside a <details> and <summary> tag so it is collapsed by default.
+         - Inside, provide the technical diagnosis of System Dynamics, Intervention Audit, and Behavioral insights.
+         - Explain the "Why" behind the recommendations above.
 
-      3.  **Behavioral & Interdisciplinary Recommendations**:
-          * **Psychological Angle**: How to increase public skepticism (reduce $\beta$) or accelerate 'Recovery' (increase $\gamma$)?
-          * **Communication Science**: Specific messaging strategies to improve $\rho$ (e.g., speed of truth vs. viral lies).
-          * **Policy/Tech**: How to optimize the timing ($interventionDay$) relative to the delay ($\tau$).
-
-      *Tone: Professional, Insightful, Strategic, and scientifically grounded in ${targetLang}.*
+      *Tone: Professional, Strategic, extremely concise, and strictly in ${targetLang}.*
     `;
 
     try {
