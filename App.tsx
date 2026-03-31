@@ -112,7 +112,7 @@ const App: React.FC = () => {
         return; 
     }
 
-    if (start > today || end > today) {
+    if (start > today || end > today+1) {
         setErrorMessage(t.futureDateError);
         setLoadingState(LoadingState.ERROR);
         return;
