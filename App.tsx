@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language, TrendAnalysisResponse } from './types';
 import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
 import { translations } from './translations';
@@ -12,7 +11,8 @@ import LoginPage from './components/LoginPage';
 import UserManual from './components/UserManual';
 import QAModal from './components/QAModal';
 import { fetchTrendData } from './services/geminiService';
-import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe, MessageCircleQuestion } from 'lucide-react';
+// ĐÃ THÊM: Import Filter và ArrowUpDown cho UI Lọc/Sắp xếp
+import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe, MessageCircleQuestion, Filter, ArrowUpDown } from 'lucide-react';
 import { marked } from 'marked';
 
 const App: React.FC = () => {
@@ -35,7 +35,11 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [dataSource, setDataSource] = useState<DataSource>('GEMINI');
 
-  // --- R-Shield Model State (Lifted for syncing) ---
+  // --- Sorting & Filtering State (MỚI) ---
+  const [filterText, setFilterText] = useState<string>('');
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // --- R-Shield Model State ---
   const [realData, setRealData] = useState<any[]>(DEFAULT_REAL_DATA);
 
   // Filters State
@@ -73,6 +77,53 @@ const App: React.FC = () => {
     }
   }, [data, terms]);
 
+  // --- Logic Xử lý Dữ liệu Lọc & Sắp xếp (MỚI) ---
+  const processedData = useMemo(() => {
+    let result = [...data];
+
+    // 1. Lọc dữ liệu (Filter)
+    if (filterText) {
+      const lowerFilter = filterText.toLowerCase();
+      result = result.filter(item => {
+        // Lọc theo ngày
+        if (item.date && String(item.date).toLowerCase().includes(lowerFilter)) return true;
+        // Lọc theo giá trị của từng từ khóa
+        return terms.some(t => {
+          const val = item[t.term];
+          return val !== undefined && String(val).toLowerCase().includes(lowerFilter);
+        });
+      });
+    }
+
+    // 2. Sắp xếp dữ liệu (Sort)
+    if (sortConfig) {
+      result.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+
+        if (valA === undefined) valA = '';
+        if (valB === undefined) valB = '';
+
+        // Ưu tiên sắp xếp theo số (nếu là dữ liệu độ quan tâm)
+        const numA = Number(valA);
+        const numB = Number(valB);
+
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+        }
+
+        // Sắp xếp theo chuỗi (dành cho cột Ngày)
+        const strA = String(valA).toLowerCase();
+        const strB = String(valB).toLowerCase();
+        if (strA < strB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (strA > strB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [data, filterText, sortConfig, terms]);
+
   useEffect(() => {
     if (user && user.role === 'GUEST') {
       setActiveTab('R_SHIELD');
@@ -98,7 +149,6 @@ const App: React.FC = () => {
 
   const handleRemoveTerm = (id: string) => setTerms(terms.filter(t => t.id !== id));
 
-  // --- [IMPORTANT] Cập nhật hàm handleAnalyze để trả về Response ---
   const handleAnalyze = async (): Promise<TrendAnalysisResponse | undefined> => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
@@ -120,7 +170,6 @@ const App: React.FC = () => {
 
     if (dataSource === 'GOOGLE_TRENDS') {
         const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
-        // Sửa đường dẫn thành /explore và đưa tham số q lên đầu
         const url = `https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`;
         window.open(url, '_blank');
         return;
@@ -131,18 +180,20 @@ const App: React.FC = () => {
     setSummary("");
     setGroundingMetadata(null);
     setData([]);
+    
+    // ĐÃ THÊM: Reset Filter & Sort khi phân tích dữ liệu mới
+    setFilterText("");
+    setSortConfig(null);
 
     try {
       const termStrings = terms.map(term => term.term);
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
 
-      // Update local state for App visualization
       setData(response.data);
       setSummary(response.summary);
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
       
-      // [QUAN TRỌNG] Trả về response để TagInput có thể nhận được dữ liệu checklist
       return response; 
       
     } catch (error: any) {
@@ -154,14 +205,10 @@ const App: React.FC = () => {
 
   const getMarkdownHtml = (content: string) => {
     if (!content) return { __html: "" };
-    
-    // Improved regex to handle LaTeX symbols and Greek letters inside dollar signs
     const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
-      // Optional: Replace common LaTeX commands with clean text for better font rendering
       const clean = p1.replace(/\\/g, '');
       return `<span class="math-symbol">${clean}</span>`;
     });
-    
     return { __html: marked.parse(processed) as string };
   };
 
@@ -255,7 +302,6 @@ const App: React.FC = () => {
 
         {activeTab === 'DATA' && user.role === 'ADMIN' ? (
             <div className="space-y-6">
-                {/* TagInput nhận prop onAnalyze trả về Promise */}
                 <TagInput 
                   terms={terms} onAddTerm={handleAddTerm} onRemoveTerm={handleRemoveTerm} onAnalyze={handleAnalyze} isLoading={loadingState === LoadingState.LOADING}
                   startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate}
@@ -266,6 +312,7 @@ const App: React.FC = () => {
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2"><AlertCircle size={18} />{errorMessage}</div>
                 )}
 
+                {/* Giữ nguyên mảng data cho Chart để biểu đồ luôn hiện theo thời gian thực (Trục X) */}
                 <TrendChart data={data} terms={terms} startDate={startDate} endDate={endDate} lang={lang} />
 
                 {loadingState === LoadingState.SUCCESS && summary && (
@@ -296,22 +343,40 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                <TrendTable data={data} terms={terms} lang={lang} />
-                <EstimatedReachTable data={data} terms={terms} lang={lang} />
-            </div>
-        ) : (
-            // R-SHIELD TAB (Visible to both ADMIN and GUEST)
-            <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
-        )}
-      </main>
-      
-      {/* Floating Action Buttons for Mobile */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
-        <button onClick={() => setIsManualOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-2xl"><HelpCircle size={24} /></button>
-        <button onClick={() => setIsQAOpen(true)} className="bg-indigo-600 text-white p-4 rounded-full shadow-2xl"><MessageCircleQuestion size={24} /></button>
-      </div>
-    </div>
-  );
-};
-
-export default App;
+                {/* ĐÃ THÊM: CONTROL PANEL LỌC VÀ SẮP XẾP BẢNG DỮ LIỆU */}
+                {data.length > 0 && (
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center mt-6">
+                        <div className="flex items-center gap-2 w-full md:w-auto relative">
+                            <Filter size={18} className="text-gray-400 absolute left-3" />
+                            <input
+                                type="text"
+                                placeholder={lang === 'vi' ? "Tìm kiếm trong bảng..." : "Search in table..."}
+                                value={filterText}
+                                onChange={(e) => setFilterText(e.target.value)}
+                                className="w-full md:w-64 pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <span className="text-sm font-medium text-gray-500 whitespace-nowrap">{lang === 'vi' ? "Sắp xếp theo:" : "Sort by:"}</span>
+                            <select
+                                value={sortConfig?.key || ''}
+                                onChange={(e) => setSortConfig(e.target.value ? { key: e.target.value, direction: sortConfig?.direction || 'desc' } : null)}
+                                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 w-full"
+                            >
+                                <option value="">-- {lang === 'vi' ? "Mặc định (Ngày)" : "Default (Date)"} --</option>
+                                <option value="date">{lang === 'vi' ? "Ngày (Date)" : "Date"}</option>
+                                {terms.map(t => (
+                                    <option key={t.id} value={t.term}>{t.term}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key: 'date', direction: 'asc' })}
+                                disabled={!sortConfig}
+                                className="p-2 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-50 transition-all shrink-0"
+                                title={lang === 'vi' ? "Đảo chiều sắp xếp" : "Toggle sort direction"}
+                            >
+                                <ArrowUpDown size={18} />
+                            </button>
+                        </div>
+                    </div>
+                )}
