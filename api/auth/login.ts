@@ -1,5 +1,4 @@
 // api/auth/login.ts
-import { connectToDatabase } from '../_lib/mongodb';
 import { connectToDatabase } from '../_lib/mongodb.js';
 import { User, AuditLog } from '../_lib/models';
 import { sendAdminAlert } from '../_lib/emailService';
