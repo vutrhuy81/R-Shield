@@ -13,15 +13,15 @@ import QAModal from './components/QAModal';
 import { fetchTrendData } from './services/geminiService';
 import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe, MessageCircleQuestion } from 'lucide-react';
 import { marked } from 'marked';
-// ... Import AdminPanel
 import { AdminPanel } from './components/AdminPanel';
 
 // Thêm logic ghi log mô phỏng (gọi API /api/logs ngầm)
-const logAction = async (action: string, details: any) => {
+const logAction = async (user: User | null, action: string, details: any) => {
+  if (!user) return;
   fetch('/api/logs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: user?.id, username: user?.username, action, details })
+    body: JSON.stringify({ userId: user.id, username: user.username, action, details })
   }).catch(console.error); // Ghi log không được block luồng UI
 };
 
@@ -31,8 +31,8 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('vi');
   const t = translations[lang];  
 
-  // --- App State ---
-  const [activeTab, setActiveTab] = useState<'DATA' | 'R_SHIELD'>('DATA');
+  // --- App State (Đã bổ sung ADMIN_PANEL vào kiểu dữ liệu) ---
+  const [activeTab, setActiveTab] = useState<'DATA' | 'R_SHIELD' | 'ADMIN_PANEL'>('DATA');
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isQAOpen, setIsQAOpen] = useState(false);
 
@@ -60,23 +60,15 @@ const App: React.FC = () => {
   // Sync Logic: Automatically update R-Shield real data when trend data is fetched
   useEffect(() => {
     if (data && data.length > 0 && terms.length > 0) {
-      // Sort data chronologically to map to Day 0, Day 1...
       const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
- 
       const syncedData = sorted.map((point, index) => {
         let totalReach = 0;
-        // Sum reach for all tracked terms on this day
         terms.forEach(term => {
           const indexValue = Number(point[term.term] || 0);
           totalReach += Math.round(indexValue * K_FACTOR);
         });
-      
-        return {
-          day: index,
-          real_I: totalReach
-        };
+        return { day: index, real_I: totalReach };
       });
-
       setRealData(syncedData);
     }
   }, [data, terms]);
@@ -84,14 +76,20 @@ const App: React.FC = () => {
   useEffect(() => {
     if (user && user.role === 'GUEST') {
       setActiveTab('R_SHIELD');
-    } else {
+    } else if (user && user.role === 'ADMIN') {
       setActiveTab('DATA');
     }
   }, [user]);
 
   const handleLogin = (userData: User) => setUser(userData);
-  const handleLogout = () => { setUser(null); setData([]); setTerms([]); };
+  const handleLogout = () => { 
+    logAction(user, 'LOGOUT', {});
+    setUser(null); 
+    setData([]); 
+    setTerms([]); 
+  };
   const toggleLang = () => setLang(prev => prev === 'vi' ? 'en' : 'vi');
+  
   const handleAddTerm = (termText: string) => {
     if (terms.some(t => t.term.toLowerCase() === termText.toLowerCase())) return;
     if (terms.length >= 5) { alert(t.maxTerms); return; }
@@ -105,13 +103,12 @@ const App: React.FC = () => {
 
   const handleRemoveTerm = (id: string) => setTerms(terms.filter(t => t.id !== id));
 
-  // --- [IMPORTANT] Cập nhật hàm handleAnalyze để trả về Response ---
   const handleAnalyze = async (): Promise<TrendAnalysisResponse | undefined> => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
     
     if (start > end) { 
         setErrorMessage(t.dateError); 
@@ -119,7 +116,7 @@ const App: React.FC = () => {
         return; 
     }
 
-    if (start > today || end > today+1) {
+    if (start > todayDate || end > todayDate) {
         setErrorMessage(t.futureDateError);
         setLoadingState(LoadingState.ERROR);
         return;
@@ -127,9 +124,9 @@ const App: React.FC = () => {
 
     if (dataSource === 'GOOGLE_TRENDS') {
         const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
-        // Sửa đường dẫn thành /explore và đưa tham số q lên đầu
         const url = `https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`;
         window.open(url, '_blank');
+        logAction(user, 'OPEN_GOOGLE_TRENDS', { terms: termStrings });
         return;
     }
 
@@ -141,15 +138,15 @@ const App: React.FC = () => {
 
     try {
       const termStrings = terms.map(term => term.term);
+      logAction(user, 'RUN_AI_ANALYSIS', { terms: termStrings, startDate, endDate }); // Ghi log hành động
+      
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
 
-      // Update local state for App visualization
       setData(response.data);
       setSummary(response.summary);
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
     
-      // [QUAN TRỌNG] Trả về response để TagInput có thể nhận được dữ liệu checklist
       return response; 
   
     } catch (error: any) {
@@ -161,14 +158,10 @@ const App: React.FC = () => {
 
   const getMarkdownHtml = (content: string) => {
     if (!content) return { __html: "" };
-  
-    // Improved regex to handle LaTeX symbols and Greek letters inside dollar signs
     const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
-      // Optional: Replace common LaTeX commands with clean text for better font rendering
       const clean = p1.replace(/\\/g, '');
       return `<span class="math-symbol">${clean}</span>`;
     });
-  
     return { __html: marked.parse(processed) as string };
   };
 
@@ -178,6 +171,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#F8F9FA] pb-20">
       <UserManual isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} lang={lang} />
       <QAModal isOpen={isQAOpen} onClose={() => setIsQAOpen(false)} lang={lang} />   
+      
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -195,7 +189,19 @@ const App: React.FC = () => {
               <Globe size={14} />
               {lang.toUpperCase()}
             </button>
+            
+            {/* VÙNG NÚT CÔNG CỤ TRÊN HEADER */}
             <div className="hidden md:flex items-center gap-4">
+              {/* Nút Quản trị hệ thống (Chỉ Admin mới thấy) */}
+              {user.role === 'ADMIN' && (
+                <button 
+                  onClick={() => setActiveTab('ADMIN_PANEL')}
+                  className={`flex items-center gap-1.5 transition-colors text-sm font-bold ${activeTab === 'ADMIN_PANEL' ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}`}
+                >
+                  <ShieldCheck size={18} />
+                  Quản trị Hệ thống
+                </button>
+              )}
               <button 
                 onClick={() => setIsManualOpen(true)}
                 className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors text-sm font-medium"
@@ -211,6 +217,7 @@ const App: React.FC = () => {
                 {t.qa}
               </button>
             </div>
+
             <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
             <div className="flex items-center gap-3">
                <div className="flex flex-col items-end">
@@ -229,6 +236,7 @@ const App: React.FC = () => {
        
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex space-x-8 -mb-px">
+                {/* Đã xóa nút Quản trị hệ thống khỏi khu vực Tab bar này */}
                 {user.role === 'ADMIN' && (
                   <button
                       onClick={() => setActiveTab('DATA')}
@@ -245,13 +253,6 @@ const App: React.FC = () => {
                     <ShieldCheck size={18} />
                     {t.tabModel}
                 </button>
-              <button
-                  onClick={() => setActiveTab('ADMIN_PANEL')}
-                  className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'ADMIN_PANEL' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-              >
-                  <ShieldCheck size={18} />
-                  Quản trị Hệ thống
-              </button>
             </div>
         </div>
       </header>
@@ -266,9 +267,16 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'DATA' && user.role === 'ADMIN' ? (
-            <div className="space-y-6">
-                {/* TagInput nhận prop onAnalyze trả về Promise */}
+        {/* LOGIC RENDER CÁC TAB ĐÃ ĐƯỢC CHIA RÕ RÀNG */}
+        
+        {/* 1. Tab Quản trị hệ thống */}
+        {activeTab === 'ADMIN_PANEL' && user.role === 'ADMIN' && (
+            <AdminPanel user={user} />
+        )}
+
+        {/* 2. Tab Thu thập & Phân tích Dữ liệu */}
+        {activeTab === 'DATA' && user.role === 'ADMIN' && (
+            <div className="space-y-6 animate-in fade-in">
                 <TagInput 
                   terms={terms} onAddTerm={handleAddTerm} onRemoveTerm={handleRemoveTerm} onAnalyze={handleAnalyze} isLoading={loadingState === LoadingState.LOADING}
                   startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate}
@@ -312,14 +320,24 @@ const App: React.FC = () => {
                 <TrendTable data={data} terms={terms} lang={lang} />
                 <EstimatedReachTable data={data} terms={terms} lang={lang} />
             </div>
-        ) : (
-            // R-SHIELD TAB (Visible to both ADMIN and GUEST)
-            <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
         )}
+
+        {/* 3. Tab Mô phỏng R-SHIELD */}
+        {activeTab === 'R_SHIELD' && (
+            <div className="animate-in fade-in">
+              <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
+            </div>
+        )}
+
       </main>
     
       {/* Floating Action Buttons for Mobile */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
+        {user.role === 'ADMIN' && (
+          <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`p-4 rounded-full shadow-2xl ${activeTab === 'ADMIN_PANEL' ? 'bg-blue-800' : 'bg-gray-800'} text-white`}>
+            <ShieldCheck size={24} />
+          </button>
+        )}
         <button onClick={() => setIsManualOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-2xl"><HelpCircle size={24} /></button>
         <button onClick={() => setIsQAOpen(true)} className="bg-indigo-600 text-white p-4 rounded-full shadow-2xl"><MessageCircleQuestion size={24} /></button>
       </div>
