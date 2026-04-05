@@ -13,6 +13,17 @@ import QAModal from './components/QAModal';
 import { fetchTrendData } from './services/geminiService';
 import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, User as UserIcon, Sparkles, ExternalLink, Globe, MessageCircleQuestion } from 'lucide-react';
 import { marked } from 'marked';
+// ... Import AdminPanel
+import { AdminPanel } from './components/AdminPanel';
+
+// Thêm logic ghi log mô phỏng (gọi API /api/logs ngầm)
+const logAction = async (action: string, details: any) => {
+  fetch('/api/logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: user?.id, username: user?.username, action, details })
+  }).catch(console.error); // Ghi log không được block luồng UI
+};
 
 const App: React.FC = () => {
   // --- Auth & Language State ---
@@ -234,6 +245,13 @@ const App: React.FC = () => {
                     <ShieldCheck size={18} />
                     {t.tabModel}
                 </button>
+              <button
+                  onClick={() => setActiveTab('ADMIN_PANEL')}
+                  className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'ADMIN_PANEL' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+              >
+                  <ShieldCheck size={18} />
+                  Quản trị Hệ thống
+              </button>
             </div>
         </div>
       </header>
