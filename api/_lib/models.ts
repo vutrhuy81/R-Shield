@@ -17,5 +17,8 @@ const logSchema = new mongoose.Schema({
   ipAddress: String,
 }, { timestamps: true });
 
-export const User = mongoose.models.User || mongoose.model('User', userSchema);
-export const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', logSchema);
+//export const User = mongoose.models.User || mongoose.model('User', userSchema);
+//export const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', logSchema);
+// Ép kiểu cho TypeScript hiểu rõ đây là Mongoose Model
+export const User = (mongoose.models.User as mongoose.Model<any>) || mongoose.model('User', userSchema);
+export const AuditLog = (mongoose.models.AuditLog as mongoose.Model<any>) || mongoose.model('AuditLog', logSchema);
