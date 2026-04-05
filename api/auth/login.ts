@@ -1,7 +1,7 @@
 // api/auth/login.ts
 import { connectToDatabase } from '../_lib/mongodb.js';
-import { User, AuditLog } from '../_lib/models';
-import { sendAdminAlert } from '../_lib/emailService';
+import { User, AuditLog } from '../_lib/models.js';
+import { sendAdminAlert } from '../_lib/emailService.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
