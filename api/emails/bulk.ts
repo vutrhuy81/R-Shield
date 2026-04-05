@@ -25,7 +25,7 @@ export default async function handler(req: any, res: any) {
     // 2. Gọi hàm gửi mail hàng loạt
     await sendBulkEmailToUsers(emailList, subject, message);
 
-    return res.status(200).json({ message: `Đã phát sóng email thành công tới ${emailList.length} tài khoản.` });
+    return res.status(200).json({ message: `Đã gửi thông báo đến tất cả email học sinh thành công tới ${emailList.length} tài khoản.` });
   } catch (error: any) {
     console.error("API Bulk Email Error:", error);
     return res.status(500).json({ message: 'Lỗi server khi gửi email', error: error.message });
