@@ -1,6 +1,6 @@
 // api/users.ts
-import { connectToDatabase } from './_lib/mongodb';
-import { User, AuditLog } from './_lib/models';
+import { connectToDatabase } from './_lib/mongodb.js';
+import { User, AuditLog } from './_lib/models.js';
 import bcrypt from 'bcryptjs';
 
 export default async function handler(req: any, res: any) {
