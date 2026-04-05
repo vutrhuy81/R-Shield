@@ -1,6 +1,6 @@
-import { connectToDatabase } from './_lib/mongodb';
-import { User, AuditLog } from './_lib/models';
-import { sendAdminAlert } from './_lib/emailService';
+import { connectToDatabase } from './_lib/mongodb.js';
+import { User, AuditLog } from './_lib/models.js';
+import { sendAdminAlert } from './_lib/emailService.js';
 
 export default async function handler(req: any, res: any) {
   await connectToDatabase();
