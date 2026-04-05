@@ -1,5 +1,5 @@
 // api/_lib/models.ts
-import mongoose from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
@@ -19,6 +19,6 @@ const logSchema = new mongoose.Schema({
 
 //export const User = mongoose.models.User || mongoose.model('User', userSchema);
 //export const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', logSchema);
-// Ép kiểu cho TypeScript hiểu rõ đây là Mongoose Model
-export const User = (mongoose.models.User as mongoose.Model<any>) || mongoose.model('User', userSchema);
-export const AuditLog = (mongoose.models.AuditLog as mongoose.Model<any>) || mongoose.model('AuditLog', logSchema);
+// Ép kiểu (Type Casting) toàn bộ biểu thức thành Model<any>
+export const User = (mongoose.models.User || mongoose.model('User', userSchema)) as Model<any>;
+export const AuditLog = (mongoose.models.AuditLog || mongoose.model('AuditLog', logSchema)) as Model<any>;
