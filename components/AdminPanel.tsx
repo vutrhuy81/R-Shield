@@ -7,6 +7,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'EMAIL'>('USERS');
   const [mailContent, setMailContent] = useState('');
+  const [isSendingMail, setIsSendingMail] = useState(false); // State loading cho nút gửi email
 
   // States cho Modal Thêm/Sửa User
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -20,22 +21,50 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
     isActive: true
   });
 
+  // --- Hàm Fetch Dữ Liệu ---
   const fetchUsers = () => fetch('/api/users').then(res => res.json()).then(setUsers);
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('/api/logs');
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data);
+      }
+    } catch (error) {
+      console.error("Không thể tải nhật ký:", error);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'USERS') fetchUsers();
-    if (activeTab === 'LOGS') fetch('/api/logs').then(res => res.json()).then(setLogs);
+    if (activeTab === 'LOGS') fetchLogs();
   }, [activeTab]);
 
+  // --- Hàm Xử Lý Gửi Email ---
   const handleSendMail = async () => {
     if (!mailContent.trim()) return alert('Vui lòng nhập nội dung!');
-    await fetch('/api/emails/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: 'Thông báo từ hệ thống R-SHIELD', message: mailContent })
-    });
-    alert('Đã gửi email thành công!');
-    setMailContent('');
+    
+    setIsSendingMail(true);
+    try {
+      const res = await fetch('/api/emails/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: 'Thông báo từ hệ thống R-SHIELD', message: mailContent })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        alert('✅ ' + data.message);
+        setMailContent(''); // Xóa nội dung sau khi gửi thành công
+      } else {
+        alert('❌ Lỗi: ' + data.message);
+      }
+    } catch (error) {
+      alert('❌ Lỗi kết nối mạng, không thể gửi email.');
+    } finally {
+      setIsSendingMail(false);
+    }
   };
 
   // --- Xử lý Form User ---
@@ -87,6 +116,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         <button onClick={() => setActiveTab('EMAIL')} className={`flex items-center gap-2 ${activeTab === 'EMAIL' ? 'text-blue-600 font-bold' : 'text-gray-500 hover:text-blue-500'}`}><Mail size={18}/> Gửi Email Hàng Loạt</button>
       </div>
 
+      {/* TAB: QUẢN LÝ USER */}
       {activeTab === 'USERS' && (
         <div className="animate-in fade-in">
           <div className="flex justify-between items-center mb-4">
@@ -125,6 +155,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         </div>
       )}
 
+      {/* TAB: XEM NHẬT KÝ */}
       {activeTab === 'LOGS' && (
         <div className="max-h-[500px] overflow-y-auto bg-gray-50 p-4 rounded-lg border animate-in fade-in">
           {logs.length === 0 ? <p className="text-center text-gray-500">Chưa có nhật ký nào.</p> : logs.map((log: any) => (
@@ -138,6 +169,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         </div>
       )}
 
+      {/* TAB: EMAIL */}
       {activeTab === 'EMAIL' && (
         <div className="flex flex-col gap-4 animate-in fade-in max-w-3xl">
           <label className="text-sm font-semibold text-gray-700">Soạn thông báo hệ thống</label>
@@ -147,8 +179,13 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
             value={mailContent}
             onChange={(e) => setMailContent(e.target.value)}
           />
-          <button onClick={handleSendMail} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium w-fit flex items-center gap-2 shadow-sm transition-all">
-            <Mail size={18}/> Phát sóng Email
+          <button 
+            onClick={handleSendMail} 
+            disabled={isSendingMail}
+            className={`px-6 py-2.5 rounded-lg font-medium w-fit flex items-center justify-center gap-2 shadow-sm transition-all text-white ${isSendingMail ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+          >
+            {isSendingMail ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Mail size={18}/>}
+            {isSendingMail ? 'Đang gửi thông báo ...' : 'Gửi thông báo Email'}
           </button>
         </div>
       )}
