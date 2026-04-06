@@ -62,7 +62,7 @@ export default async function handler(req: any, res: any) {
 
     // Gửi email cho Admin (Tùy chọn: có thể comment lại nếu không muốn nhận email mỗi lần đăng nhập)
     await sendAdminAlert('LOGIN', user.username, { 
-      time: new Date().toLocaleString(),
+      time: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
       ip: req.headers['x-forwarded-for'] || 'Unknown'
     });
 
