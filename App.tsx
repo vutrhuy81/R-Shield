@@ -116,7 +116,7 @@ const App: React.FC = () => {
         return; 
     }
 
-    if (start > todayDate || end > todayDate) {
+    if (start >= todayDate || end >= todayDate) {
         setErrorMessage(t.futureDateError);
         setLoadingState(LoadingState.ERROR);
         return;
