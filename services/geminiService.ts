@@ -125,8 +125,8 @@ export const fetchTrendData = async (
         
         // Thêm câu giải thích vào summary
         const warningSuffix = lang === 'vi' 
-            ? ' (Hệ thống tự động hạ cấp: AI kết luận là đã kiểm chứng/bác bỏ nhưng không cung cấp được link báo chí chính thống của Việt Nam làm bằng chứng).' 
-            : ' (System auto-downgrade: AI concluded verified/debunked but provided no reputable Vietnamese media source links as evidence).';
+            ? ' (Hệ thống tự động hạ cấp: Hệ thống kết luận là đã kiểm chứng/bác bỏ nhưng không cung cấp được link báo chí chính thống của Việt Nam làm bằng chứng).' 
+            : ' (System auto-downgrade: System concluded verified/debunked but provided no reputable Vietnamese media source links as evidence).';
         result.summary += warningSuffix;
         
         // Vì summary bị hạ cấp, chúng ta cần ép Checklist về TRUE (nguồn mơ hồ, thiếu bằng chứng)
@@ -139,8 +139,8 @@ export const fetchTrendData = async (
                       ...item, 
                       detected: true, // Ép về TRUE
                       reason: lang === 'vi' 
-                        ? 'Hệ thống tự động cập nhật: AI không cung cấp được link báo chí chính thống làm bằng chứng kiểm chứng.' 
-                        : 'System auto-correction: AI provided no reputable media source links for verification.' 
+                        ? 'Hệ thống tự động cập nhật: System không cung cấp được link báo chí chính thống làm bằng chứng kiểm chứng.' 
+                        : 'System auto-correction: System provided no reputable media source links for verification.' 
                     };
                 }
                 return item;
