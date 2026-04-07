@@ -38,13 +38,15 @@ export const fetchTrendData = async (
        - **Baseline**: Days with no news should have natural noise (5-15), NOT zero.
 
     3. **Verification Protocol (Fact-Checking)**:
-       - For every major event identified in step 1, apply a verification logic:
-         a. **Cross-Check Sources**: Do reputable/mainstream media outlets report this, or only social media/tabloids?
-         b. **Official Statements**: Is there a confirmation from authorities (police, government, institutions)?
-         c. **Classification Labels in ${targetLang}**: Label the event driving the trend as one of the following:
-            - [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}]
-            - [${lang === 'vi' ? 'TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG' : 'UNVERIFIED RUMOR'}]
-            - [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}]
+       - For every major event identified in step 1, apply a verification logic using Google Search:
+         a. **Source Type Verification (MANDATORY)**: You MUST prioritize finding official statements or articles from standard, reputable Vietnamese media (e.g., VTV, Tuổi Trẻ, Thanh Niên, VietnamNet, CAND).
+         b. **Conclusion Rule (MANDATORY)**:
+            - YOU CAN ONLY classify an event driving the trend as [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}] OR [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}] IF, AND ONLY IF, you have found at least one direct, confirmable link from a standard, reputable Vietnamese media source.
+            - If no reputable Vietnamese media source has reported on the event (confirming or debunking it), you MUST classify it as [${lang === 'vi' ? 'TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG' : 'UNVERIFIED RUMOR'}], regardless of what is reported on social media or international tabloids.
+         c. **Classification Labels in ${targetLang}**: Use these labels for the event driving the trend:
+            - [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}]
+            - [${lang === 'vi' ? 'TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG' : 'UNVERIFIED RUMOR'}]
+            - [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}]
 
     4. **Output Requirement**:
        - Provide a strictly valid JSON object.
@@ -54,16 +56,17 @@ export const fetchTrendData = async (
        - Always display resource links to reputable news websites for reference if the search result is not fake news.
        
     5. **Rumor Checklist Analysis (MANDATORY)**:
-       Analyze the query topic based on these 5 signs of school rumors. Return a boolean (true if sign is present) and a short reasoning.
-       CRITICAL LOGIC LINK: Your evaluation in this checklist MUST logically align with the Verification Status in Step 3. 
-       - If Step 3 classifies the event as [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}] OR [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}], it means the source is clear and there is official evidence or official debunking from authorities. Therefore, "Sign 1 (Vague Source)" and "Sign 2 (Lack of Evidence)" MUST BE FALSE.
-       - The 'reason' field for each item MUST be in ${targetLang} and explain the connection to the facts found in Step 3.
-       
-       - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources? (False if confirmed or debunked by mainstream media/authorities).
-       - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? (False if police/school/authorities have issued a statement confirming or debunking it).
-       - **Sign 3: Urgency/Pushy (Ngôn ngữ thúc ép)**: Words like "Share now", "Don't tell anyone", "100% true"?
-       - **Sign 4: Emotional Trigger (Cảm xúc mạnh)**: Does it provoke fear, anger, or extreme curiosity?
-       - **Sign 5: Procedural Inconsistency (Sai quy trình)**: Does it contradict normal school protocols?
+       Analyze the query topic based on these 5 signs of school rumors. Return a boolean (true if sign is present) and a short reasoning.
+       
+        **CRITICAL LOGIC LINK (MANDATORY)**: Your evaluation in this checklist MUST logically align with the Verification Status in Step 3. 
+       - If Step 3 classifies the event as [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}] OR [${lang === 'vi' ? 'TIN GIẢ/ĐÃ BỊ BÁC BỎ' : 'FAKE NEWS/DEBUNKED'}], it means the source is clear and there is official evidence or official debunking from authorities. Therefore, "Sign 1 (Vague Source)" and "Sign 2 (Lack of Evidence)" MUST BE FALSE.
+       - The 'reason' field for each item MUST be in ${targetLang} and explain the connection to the facts found in Step 3.
+       
+       - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources? (False if confirmed or debunked by mainstream media/authorities).
+       - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? (False if police/school/authorities have issued a statement confirming or debunking it).
+       - **Sign 3: Urgency/Pushy (Ngôn ngữ thúc ép)** Word like "Share now", "Don't tell anyone", "100% true"?
+       - **Sign 4: Emotional Trigger (Cảm xúc mạnh)** Does it provoke fear, anger, or extreme curiosity?
+       - **Sign 5: Procedural Inconsistency (Sai quy trình)** Does it contradict normal school protocols?
 
     Output JSON Format:
     {
@@ -82,6 +85,8 @@ export const fetchTrendData = async (
     }
   `;
 
+  // geminiService.ts -> fetchTrendData function
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -98,24 +103,59 @@ export const fetchTrendData = async (
     // =========================================================================
     // CODE BỔ SUNG: BẮT ĐẦU XỬ LÝ ÉP LOGIC CỨNG (DETERMINISTIC OVERRIDE)
     // =========================================================================
+    
+    // 1. Kiểm tra tính hiện hữu của link nguồn (Grounding check)
+    const hasGroundingLinks = !!(response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent);
+
+    // 2. Phân tích kết luận của AI
     const summaryUpper = result.summary ? result.summary.toUpperCase() : "";
     
-    // Kiểm tra xem AI đã dán nhãn đây là tin có nguồn chính thống/bác bỏ chưa
-    const isVerifiedOrDebunked = 
-        summaryUpper.includes('TIN ĐÃ KIỂM CHỨNG') || 
-        summaryUpper.includes('VERIFIED NEWS') || 
-        summaryUpper.includes('TIN GIẢ/ĐÃ BỊ BÁC BỎ') || 
-        summaryUpper.includes('FAKE NEWS/DEBUNKED');
+    const isVerified = summaryUpper.includes('TIN ĐÃ KIỂM CHỨNG') || summaryUpper.includes('VERIFIED NEWS');
+    const isDebunked = summaryUpper.includes('TIN GIẢ/ĐÃ BỊ BÁC BỎ') || summaryUpper.includes('FAKE NEWS/DEBUNKED');
 
-    if (isVerifiedOrDebunked && result.checklist) {
-        // Ép 2 tiêu chí đầu tiên thành FALSE nếu thỏa mãn điều kiện
+    // 3. Thực thi Logic Cảnh báo Nguồn tin: Ép hạ cấp nếu không có link báo chính thống
+    if ((isVerified || isDebunked) && !hasGroundingLinks) {
+        // Cập nhật Summary để hạ cấp kết luận
+        const newLabel = lang === 'vi' ? '[TIN ĐỒN CHƯA ĐƯỢC KIỂM CHỨNG]' : '[UNVERIFIED RUMOR]';
+        result.summary = result.summary
+            .replace(/\[TIN ĐÃ KIỂM CHỨNG\]/g, newLabel)
+            .replace(/\[VERIFIED NEWS\]/g, newLabel)
+            .replace(/\[TIN GIẢ\/ĐÃ BỊ BÁC BỎ\]/g, newLabel)
+            .replace(/\[FAKE NEWS\/DEBUNKED\]/g, newLabel);
+        
+        // Thêm câu giải thích vào summary
+        const warningSuffix = lang === 'vi' 
+            ? ' (Hệ thống tự động hạ cấp: AI kết luận là đã kiểm chứng/bác bỏ nhưng không cung cấp được link báo chí chính thống của Việt Nam làm bằng chứng).' 
+            : ' (System auto-downgrade: AI concluded verified/debunked but provided no reputable Vietnamese media source links as evidence).';
+        result.summary += warningSuffix;
+        
+        // Vì summary bị hạ cấp, chúng ta cần ép Checklist về TRUE (nguồn mơ hồ, thiếu bằng chứng)
+        if (result.checklist) {
+            result.checklist = result.checklist.map((item: any) => {
+                const signUpper = item.sign.toUpperCase();
+                if (signUpper.includes('NGUỒN THÔNG TIN MƠ HỒ') || signUpper.includes('VAGUE SOURCE') ||
+                    signUpper.includes('THIẾU BẰNG CHỨNG') || signUpper.includes('LACK OF VERIFIABLE EVIDENCE')) {
+                    return { 
+                      ...item, 
+                      detected: true, // Ép về TRUE
+                      reason: lang === 'vi' 
+                        ? 'Hệ thống tự động cập nhật: AI không cung cấp được link báo chí chính thống làm bằng chứng kiểm chứng.' 
+                        : 'System auto-correction: AI provided no reputable media source links for verification.' 
+                    };
+                }
+                return item;
+            });
+        }
+    } 
+    // 4. Thực thi Logic Nhất quán (xử lý vấn đề bạn phát hiện): Ép Checklist về FALSE nếu summary nhất quán
+    else if ((isVerified || isDebunked) && hasGroundingLinks && result.checklist) {
         result.checklist = result.checklist.map((item: any) => {
             const signUpper = item.sign.toUpperCase();
             if (signUpper.includes('NGUỒN THÔNG TIN MƠ HỒ') || signUpper.includes('VAGUE SOURCE') ||
                 signUpper.includes('THIẾU BẰNG CHỨNG') || signUpper.includes('LACK OF VERIFIABLE EVIDENCE')) {
                 return { 
                   ...item, 
-                  detected: false, 
+                  detected: false, // Ép về FALSE
                   reason: lang === 'vi' 
                     ? 'Hệ thống tự động cập nhật: Đã có thông tin/bằng chứng chính thức từ cơ quan chức năng hoặc báo chí xác nhận/bác bỏ.' 
                     : 'System auto-correction: Official verification or debunking evidence exists.' 
