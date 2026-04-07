@@ -52,15 +52,18 @@ export const fetchTrendData = async (
        - 'data' must contain exactly one entry per day for the requested range.       
        - Display the conclusion: whether this search result is fake news or not in ${targetLang}..
        - Always display resource links to reputable news websites for reference if the search result is not fake news.
+       
     5. **Rumor Checklist Analysis (MANDATORY)**:
        Analyze the query topic based on these 5 signs of school rumors. Return a boolean (true if sign is present) and a short reasoning.
-       CRITICAL: The 'reason' field for each item MUST be in ${targetLang}.
+       CRITICAL LOGIC LINK: Your evaluation in this checklist MUST logically align with the Verification Status in Step 3. 
+       - If Step 3 classifies the event as [${lang === 'vi' ? 'TIN ĐÃ KIỂM CHỨNG' : 'VERIFIED NEWS'}], it means the source is clear and there is official evidence. Therefore, "Sign 1 (Vague Source)" and "Sign 2 (Lack of Evidence)" MUST BE FALSE.
+       - The 'reason' field for each item MUST be in ${targetLang} and explain the connection to the facts found in Step 3.
        
-       - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources?
-       - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? Just screenshots/hearsay?
+       - **Sign 1: Vague Source (Nguồn tin mơ hồ)**: Does it come from "heard that", "friend said", or anonymous sources? (False if confirmed by mainstream media).
+       - **Sign 2: Lack of Evidence (Thiếu bằng chứng)**: Is there a lack of official documents/announcements? (False if police/school has issued a statement).
        - **Sign 3: Urgency/Pushy (Ngôn ngữ thúc ép)**: Words like "Share now", "Don't tell anyone", "100% true"?
        - **Sign 4: Emotional Trigger (Cảm xúc mạnh)**: Does it provoke fear, anger, or extreme curiosity?
-       - **Sign 5: Procedural Inconsistency (Sai quy trình)**: Does it contradict normal school protocols (e.g., discipline announced via rumors instead of official channels)?
+       - **Sign 5: Procedural Inconsistency (Sai quy trình)**: Does it contradict normal school protocols?
 
     Output JSON Format:
     {
