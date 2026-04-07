@@ -25,6 +25,16 @@ const logAction = async (user: User | null, action: string, details: any) => {
   }).catch(console.error); // Ghi log không được block luồng UI
 };
 
+// Hàm lấy chuỗi ngày tháng YYYY-MM-DD chuẩn theo múi giờ Việt Nam
+const getVNDateString = (date: Date) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+};
+
 const App: React.FC = () => {
   // --- Auth & Language State ---
   const [user, setUser] = useState<User | null>(null);
@@ -51,11 +61,13 @@ const App: React.FC = () => {
   // Filters State
   const [geoLocation, setGeoLocation] = useState<string>('VN');
   const [searchType, setSearchType] = useState<SearchType>('web');
+  
+    // Khởi tạo ngày bắt đầu và kết thúc chuẩn theo múi giờ VN
   const today = new Date();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(today.getDate() - 30);
-  const [startDate, setStartDate] = useState<string>(thirtyDaysAgo.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState<string>(today.toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(getVNDateString(thirtyDaysAgo)); //const [startDate, setStartDate] = useState<string>(thirtyDaysAgo.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(getVNDateString(today)); //const [endDate, setEndDate] = useState<string>(today.toISOString().split('T')[0]);
 
   // Sync Logic: Automatically update R-Shield real data when trend data is fetched
   useEffect(() => {
@@ -107,8 +119,10 @@ const App: React.FC = () => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
+
+    // Ngày hiện tại chuẩn theo giờ Việt Nam
+    const vnTodayStr = getVNDateString(new Date()); //const todayDate = new Date();
+    const todayDate = new Date(vnTodayStr); //todayDate.setHours(0, 0, 0, 0);
     
     if (start > end) { 
         setErrorMessage(t.dateError); 
@@ -116,7 +130,7 @@ const App: React.FC = () => {
         return; 
     }
 
-    if (start >= todayDate || end >= todayDate) {
+    if (start > todayDate || end > todayDate) {
         setErrorMessage(t.futureDateError);
         setLoadingState(LoadingState.ERROR);
         return;
