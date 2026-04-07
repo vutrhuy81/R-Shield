@@ -84,7 +84,7 @@ export const fetchTrendData = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Giữ nguyên Flash cho tác vụ search/data generation để tối ưu tốc độ
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: { 
         tools: [{ googleSearch: {} }], 
@@ -94,6 +94,40 @@ export const fetchTrendData = async (
     
     const result = parseJSON(response.text);
     if (!result || !result.data) throw new Error("Invalid AI response");
+
+    // =========================================================================
+    // CODE BỔ SUNG: BẮT ĐẦU XỬ LÝ ÉP LOGIC CỨNG (DETERMINISTIC OVERRIDE)
+    // =========================================================================
+    const summaryUpper = result.summary ? result.summary.toUpperCase() : "";
+    
+    // Kiểm tra xem AI đã dán nhãn đây là tin có nguồn chính thống/bác bỏ chưa
+    const isVerifiedOrDebunked = 
+        summaryUpper.includes('TIN ĐÃ KIỂM CHỨNG') || 
+        summaryUpper.includes('VERIFIED NEWS') || 
+        summaryUpper.includes('TIN GIẢ/ĐÃ BỊ BÁC BỎ') || 
+        summaryUpper.includes('FAKE NEWS/DEBUNKED');
+
+    if (isVerifiedOrDebunked && result.checklist) {
+        // Ép 2 tiêu chí đầu tiên thành FALSE nếu thỏa mãn điều kiện
+        result.checklist = result.checklist.map((item: any) => {
+            const signUpper = item.sign.toUpperCase();
+            if (signUpper.includes('NGUỒN THÔNG TIN MƠ HỒ') || signUpper.includes('VAGUE SOURCE') ||
+                signUpper.includes('THIẾU BẰNG CHỨNG') || signUpper.includes('LACK OF VERIFIABLE EVIDENCE')) {
+                return { 
+                  ...item, 
+                  detected: false, 
+                  reason: lang === 'vi' 
+                    ? 'Hệ thống tự động cập nhật: Đã có thông tin/bằng chứng chính thức từ cơ quan chức năng hoặc báo chí xác nhận/bác bỏ.' 
+                    : 'System auto-correction: Official verification or debunking evidence exists.' 
+                };
+            }
+            return item;
+        });
+    }
+    // =========================================================================
+    // KẾT THÚC XỬ LÝ ÉP LOGIC CỨNG
+    // =========================================================================
+
     result.data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
     return { 
