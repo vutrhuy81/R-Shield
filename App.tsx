@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { SearchTerm, TrendDataPoint, LoadingState, DataSource, SearchType, User, Language, TrendAnalysisResponse } from './types';
 import { GOOGLE_COLORS, K_FACTOR, DEFAULT_REAL_DATA } from './constants';
@@ -16,43 +15,61 @@ import { AlertCircle, TrendingUp, ShieldCheck, Database, LogOut, HelpCircle, Use
 import { marked } from 'marked';
 import { AdminPanel } from './components/AdminPanel';
 
+// Thêm logic ghi log mô phỏng (gọi API /api/logs ngầm)
 const logAction = async (user: User | null, action: string, details: any) => {
   if (!user) return;
   fetch('/api/logs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId: user.id, username: user.username, action, details })
-  }).catch(console.error);
+  }).catch(console.error); // Ghi log không được block luồng UI
+};
+
+// Hàm lấy chuỗi ngày tháng YYYY-MM-DD chuẩn theo múi giờ Việt Nam
+const getVNDateString = (date: Date) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
 };
 
 const App: React.FC = () => {
+  // --- Auth & Language State ---
   const [user, setUser] = useState<User | null>(null);
   const [lang, setLang] = useState<Language>('vi');
   const t = translations[lang];  
 
+  // --- App State (Đã bổ sung ADMIN_PANEL vào kiểu dữ liệu) ---
   const [activeTab, setActiveTab] = useState<'DATA' | 'R_SHIELD' | 'ADMIN_PANEL'>('DATA');
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isQAOpen, setIsQAOpen] = useState(false);
 
+  // --- Data Collection State ---
   const [terms, setTerms] = useState<SearchTerm[]>([]);
   const [data, setData] = useState<TrendDataPoint[]>([]);
   const [summary, setSummary] = useState<string>("");
-  const [checklist, setChecklist] = useState<any[] | null>(null); // State mới
   const [groundingMetadata, setGroundingMetadata] = useState<any>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>(LoadingState.IDLE);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [dataSource, setDataSource] = useState<DataSource>('GEMINI');
 
+  // --- R-Shield Model State (Lifted for syncing) ---
   const [realData, setRealData] = useState<any[]>(DEFAULT_REAL_DATA);
+
+  // Filters State
   const [geoLocation, setGeoLocation] = useState<string>('VN');
   const [searchType, setSearchType] = useState<SearchType>('web');
   
+    // Khởi tạo ngày bắt đầu và kết thúc chuẩn theo múi giờ VN
   const today = new Date();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(today.getDate() - 30);
-  const [startDate, setStartDate] = useState<string>(thirtyDaysAgo.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState<string>(today.toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(getVNDateString(thirtyDaysAgo)); //const [startDate, setStartDate] = useState<string>(thirtyDaysAgo.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(getVNDateString(today)); //const [endDate, setEndDate] = useState<string>(today.toISOString().split('T')[0]);
 
+  // Sync Logic: Automatically update R-Shield real data when trend data is fetched
   useEffect(() => {
     if (data && data.length > 0 && terms.length > 0) {
       const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -82,7 +99,6 @@ const App: React.FC = () => {
     setUser(null); 
     setData([]); 
     setTerms([]); 
-    setChecklist(null);
   };
   const toggleLang = () => setLang(prev => prev === 'vi' ? 'en' : 'vi');
   
@@ -103,15 +119,27 @@ const App: React.FC = () => {
     if (terms.length === 0) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
+
+    // Ngày hiện tại chuẩn theo giờ Việt Nam
+    const vnTodayStr = getVNDateString(new Date()); //const todayDate = new Date();
+    const todayDate = new Date(vnTodayStr); //todayDate.setHours(0, 0, 0, 0);
     
-    if (start > end) { setErrorMessage(t.dateError); setLoadingState(LoadingState.ERROR); return; }
-    if (start > todayDate || end > todayDate) { setErrorMessage(t.futureDateError); setLoadingState(LoadingState.ERROR); return; }
+    if (start > end) { 
+        setErrorMessage(t.dateError); 
+        setLoadingState(LoadingState.ERROR); 
+        return; 
+    }
+
+    if (start > todayDate || end > todayDate) {
+        setErrorMessage(t.futureDateError);
+        setLoadingState(LoadingState.ERROR);
+        return;
+    }
 
     if (dataSource === 'GOOGLE_TRENDS') {
         const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
-        window.open(`https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`, '_blank');
+        const url = `https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`;
+        window.open(url, '_blank');
         logAction(user, 'OPEN_GOOGLE_TRENDS', { terms: termStrings });
         return;
     }
@@ -119,22 +147,22 @@ const App: React.FC = () => {
     setLoadingState(LoadingState.LOADING);
     setErrorMessage("");
     setSummary("");
-    setChecklist(null); // Reset
     setGroundingMetadata(null);
     setData([]);
 
     try {
       const termStrings = terms.map(term => term.term);
-      logAction(user, 'RUN_AI_ANALYSIS', { terms: termStrings, startDate, endDate });
+      logAction(user, 'RUN_AI_ANALYSIS', { terms: termStrings, startDate, endDate }); // Ghi log hành động
       
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
 
       setData(response.data);
       setSummary(response.summary);
-      setChecklist(response.checklist); // Lưu checklist
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
+    
       return response; 
+  
     } catch (error: any) {
       setLoadingState(LoadingState.ERROR);
       setErrorMessage(error.message || "Error");
@@ -144,7 +172,10 @@ const App: React.FC = () => {
 
   const getMarkdownHtml = (content: string) => {
     if (!content) return { __html: "" };
-    const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => `<span class="math-symbol">${p1.replace(/\\/g, '')}</span>`);
+    const processed = content.replace(/\$([^$]+)\$/g, (match, p1) => {
+      const clean = p1.replace(/\\/g, '');
+      return `<span class="math-symbol">${clean}</span>`;
+    });
     return { __html: marked.parse(processed) as string };
   };
 
@@ -158,45 +189,83 @@ const App: React.FC = () => {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-600 text-white p-1.5 rounded-lg shadow-md"><TrendingUp size={20} /></div>
+            <div className="bg-blue-600 text-white p-1.5 rounded-lg shadow-md">
+                <TrendingUp size={20} />
+            </div>
             <h1 className="text-lg md:text-xl font-bold text-gray-800 tracking-tight">{t.appTitle}</h1>
           </div>
        
           <div className="flex items-center gap-2 md:gap-4">
-            <button onClick={toggleLang} className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-200 transition-all">
-              <Globe size={14} /> {lang.toUpperCase()}
+            <button 
+              onClick={toggleLang}
+              className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-200 transition-all"
+            >
+              <Globe size={14} />
+              {lang.toUpperCase()}
             </button>
             
+            {/* VÙNG NÚT CÔNG CỤ TRÊN HEADER */}
             <div className="hidden md:flex items-center gap-4">
+              {/* Nút Quản trị hệ thống (Chỉ Admin mới thấy) */}
               {user.role === 'ADMIN' && (
-                <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`flex items-center gap-1.5 transition-colors text-sm font-bold ${activeTab === 'ADMIN_PANEL' ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}`}>
-                  <ShieldCheck size={18} /> Quản trị Hệ thống
+                <button 
+                  onClick={() => setActiveTab('ADMIN_PANEL')}
+                  className={`flex items-center gap-1.5 transition-colors text-sm font-bold ${activeTab === 'ADMIN_PANEL' ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}`}
+                >
+                  <ShieldCheck size={18} />
+                  Quản trị Hệ thống
                 </button>
               )}
-              <button onClick={() => setIsManualOpen(true)} className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors text-sm font-medium"><HelpCircle size={18} /> {t.manual}</button>
-              <button onClick={() => setIsQAOpen(true)} className="flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors text-sm font-medium"><MessageCircleQuestion size={18} /> {t.qa}</button>
+              <button 
+                onClick={() => setIsManualOpen(true)}
+                className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors text-sm font-medium"
+              >
+                <HelpCircle size={18} />
+                {t.manual}
+              </button>
+              <button 
+                onClick={() => setIsQAOpen(true)}
+                className="flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors text-sm font-medium"
+              >
+                <MessageCircleQuestion size={18} />
+                {t.qa}
+              </button>
             </div>
 
             <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
             <div className="flex items-center gap-3">
                <div className="flex flex-col items-end">
-                  <span className="text-sm font-bold text-gray-800 flex items-center gap-1"><UserIcon size={14} className="text-blue-500" /> {user.username}</span>
+                  <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
+                    <UserIcon size={14} className="text-blue-500" />
+                    {user.username}
+                  </span>
                   <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">{user.role}</span>
                </div>
-               <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title={t.logout}><LogOut size={20} /></button>
+               <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title={t.logout}>
+                 <LogOut size={20} />
+               </button>
             </div>
           </div>
         </div>
        
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex space-x-8 -mb-px">
+                {/* Đã xóa nút Quản trị hệ thống khỏi khu vực Tab bar này */}
                 {user.role === 'ADMIN' && (
-                  <button onClick={() => setActiveTab('DATA')} className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'DATA' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                      <Database size={18} /> {t.tabData}
+                  <button
+                      onClick={() => setActiveTab('DATA')}
+                      className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'DATA' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                  >
+                      <Database size={18} />
+                      {t.tabData}
                   </button>
                 )}
-                <button onClick={() => setActiveTab('R_SHIELD')} className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'R_SHIELD' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                    <ShieldCheck size={18} /> {t.tabModel}
+                <button
+                    onClick={() => setActiveTab('R_SHIELD')}
+                    className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'R_SHIELD' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                >
+                    <ShieldCheck size={18} />
+                    {t.tabModel}
                 </button>
             </div>
         </div>
@@ -205,60 +274,89 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!import.meta.env.VITE_API_KEY && (
            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg">
-            <div className="flex items-center gap-3"><AlertCircle className="h-5 w-5 text-yellow-400" /><p className="text-sm text-yellow-700">{t.apiKeyWarning}</p></div>
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-400" />
+              <p className="text-sm text-yellow-700">{t.apiKeyWarning}</p>
+            </div>
           </div>
         )}
 
-        {activeTab === 'ADMIN_PANEL' && user.role === 'ADMIN' && <AdminPanel user={user} />}
+        {/* LOGIC RENDER CÁC TAB ĐÃ ĐƯỢC CHIA RÕ RÀNG */}
+        
+        {/* 1. Tab Quản trị hệ thống */}
+        {activeTab === 'ADMIN_PANEL' && user.role === 'ADMIN' && (
+            <AdminPanel user={user} />
+        )}
 
+        {/* 2. Tab Thu thập & Phân tích Dữ liệu */}
         {activeTab === 'DATA' && user.role === 'ADMIN' && (
             <div className="space-y-6 animate-in fade-in">
-                <TagInput terms={terms} onAddTerm={handleAddTerm} onRemoveTerm={handleRemoveTerm} onAnalyze={handleAnalyze} isLoading={loadingState === LoadingState.LOADING} startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate} dataSource={dataSource} setDataSource={setDataSource} geoLocation={geoLocation} setGeoLocation={setGeoLocation} searchType={searchType} setSearchType={setSearchType} lang={lang} />
-                {loadingState === LoadingState.ERROR && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2"><AlertCircle size={18} />{errorMessage}</div>}
+                <TagInput 
+                  terms={terms} onAddTerm={handleAddTerm} onRemoveTerm={handleRemoveTerm} onAnalyze={handleAnalyze} isLoading={loadingState === LoadingState.LOADING}
+                  startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate}
+                  dataSource={dataSource} setDataSource={setDataSource} geoLocation={geoLocation} setGeoLocation={setGeoLocation} searchType={searchType} setSearchType={setSearchType} lang={lang}
+                />
+
+                {loadingState === LoadingState.ERROR && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2"><AlertCircle size={18} />{errorMessage}</div>
+                )}
+
                 <TrendChart data={data} terms={terms} startDate={startDate} endDate={endDate} lang={lang} />
 
                 {loadingState === LoadingState.SUCCESS && summary && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 shadow-sm">
-                        <h3 className="text-blue-900 font-semibold mb-2 flex items-center gap-2"><Sparkles size={18} className="text-blue-500" /> {t.aiAnalysis}</h3>
-                        <div className="prose prose-sm prose-blue text-blue-800 leading-relaxed" dangerouslySetInnerHTML={getMarkdownHtml(summary)} />
+                        <h3 className="text-blue-900 font-semibold mb-2 flex items-center gap-2">
+                            <Sparkles size={18} className="text-blue-500" />
+                            {t.aiAnalysis}
+                        </h3>
+                        <div 
+                          className="prose prose-sm prose-blue text-blue-800 leading-relaxed"
+                          dangerouslySetInnerHTML={getMarkdownHtml(summary)}
+                        />
+
                         {groundingMetadata?.groundingChunks && groundingMetadata.groundingChunks.some((c: any) => c.web) && (
                           <div className="mt-4 pt-4 border-t border-blue-100">
                             <p className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wider">{t.searchSources}</p>
                             <div className="flex flex-wrap gap-2">
                               {groundingMetadata.groundingChunks.map((chunk: any, idx: number) => (
-                                chunk.web && <a key={idx} href={chunk.web.uri} target="_blank" rel="noopener noreferrer" className="text-xs bg-white text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-50 flex items-center gap-1 shadow-sm"><ExternalLink size={10} /> {chunk.web.title || chunk.web.uri}</a>
+                                chunk.web && (
+                                  <a key={idx} href={chunk.web.uri} target="_blank" rel="noopener noreferrer" className="text-xs bg-white text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-50 flex items-center gap-1 shadow-sm">
+                                    <ExternalLink size={10} /> {chunk.web.title || chunk.web.uri}
+                                  </a>
+                                )
                               ))}
                             </div>
                           </div>
                         )}
                     </div>
                 )}
+
                 <TrendTable data={data} terms={terms} lang={lang} />
                 <EstimatedReachTable data={data} terms={terms} lang={lang} />
             </div>
         )}
 
+        {/* 3. Tab Mô phỏng R-SHIELD */}
         {activeTab === 'R_SHIELD' && (
             <div className="animate-in fade-in">
-              <RShieldTab 
-                terms={terms} 
-                lang={lang} 
-                realData={realData} 
-                setRealData={setRealData} 
-                user={user} 
-                summary={summary} 
-                checklist={checklist} 
-              />
+              <RShieldTab terms={terms} lang={lang} realData={realData} setRealData={setRealData} />
             </div>
         )}
+
       </main>
     
+      {/* Floating Action Buttons for Mobile */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
-        {user.role === 'ADMIN' && <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`p-4 rounded-full shadow-2xl ${activeTab === 'ADMIN_PANEL' ? 'bg-blue-800' : 'bg-gray-800'} text-white`}><ShieldCheck size={24} /></button>}
+        {user.role === 'ADMIN' && (
+          <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`p-4 rounded-full shadow-2xl ${activeTab === 'ADMIN_PANEL' ? 'bg-blue-800' : 'bg-gray-800'} text-white`}>
+            <ShieldCheck size={24} />
+          </button>
+        )}
         <button onClick={() => setIsManualOpen(true)} className="bg-blue-600 text-white p-4 rounded-full shadow-2xl"><HelpCircle size={24} /></button>
         <button onClick={() => setIsQAOpen(true)} className="bg-indigo-600 text-white p-4 rounded-full shadow-2xl"><MessageCircleQuestion size={24} /></button>
       </div>
     </div>
   );
 };
+
 export default App;
