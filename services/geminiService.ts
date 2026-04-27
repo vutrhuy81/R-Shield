@@ -93,7 +93,7 @@ export const fetchTrendData = async (
       contents: prompt,
       config: { 
         tools: [{ googleSearch: {} }], 
-        temperature: 0.5 
+        temperature: 0.1 // Đã sửa từ 0.5 xuống 0.1
       }
     });
     
@@ -149,16 +149,34 @@ export const fetchTrendData = async (
     } 
     // 4. Thực thi Logic Nhất quán (xử lý vấn đề bạn phát hiện): Ép Checklist về FALSE nếu summary nhất quán
     else if ((isVerified || isDebunked) && hasGroundingLinks && result.checklist) {
+        // Nếu ĐÃ RÕ RÀNG (Có báo chính thống đăng), thì các yếu tố mơ hồ phải là FALSE
         result.checklist = result.checklist.map((item: any) => {
             const signUpper = item.sign.toUpperCase();
             if (signUpper.includes('NGUỒN THÔNG TIN MƠ HỒ') || signUpper.includes('VAGUE SOURCE') ||
                 signUpper.includes('THIẾU BẰNG CHỨNG') || signUpper.includes('LACK OF VERIFIABLE EVIDENCE')) {
                 return { 
                   ...item, 
-                  detected: false, // Ép về FALSE
+                  detected: false, 
                   reason: lang === 'vi' 
                     ? 'Hệ thống tự động cập nhật: Đã có thông tin/bằng chứng chính thức từ cơ quan chức năng hoặc báo chí xác nhận/bác bỏ.' 
                     : 'System auto-correction: Official verification or debunking evidence exists.' 
+                };
+            }
+            return item;
+        });
+    }
+    else if (!isVerified && !isDebunked && result.checklist) {
+        // Nếu là TIN ĐỒN CHƯA KIỂM CHỨNG, ép hệ thống cảnh báo mức cao (Nguồn mơ hồ = True, Thiếu bằng chứng = True)
+        result.checklist = result.checklist.map((item: any) => {
+            const signUpper = item.sign.toUpperCase();
+            if (signUpper.includes('NGUỒN THÔNG TIN MƠ HỒ') || signUpper.includes('VAGUE SOURCE') ||
+                signUpper.includes('THIẾU BẰNG CHỨNG') || signUpper.includes('LACK OF VERIFIABLE EVIDENCE')) {
+                return { 
+                  ...item, 
+                  detected: true, // Ép về TRUE để BGH cảnh giác
+                  reason: lang === 'vi' 
+                    ? 'Hệ thống tự động cảnh báo: Không tìm thấy bất kỳ nguồn tin chính thống nào xác nhận sự việc này.' 
+                    : 'System auto-warning: No reputable sources found confirming this event.' 
                 };
             }
             return item;
