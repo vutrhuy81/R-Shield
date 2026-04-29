@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
-import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2, Target } from 'lucide-react';
+import { Settings, RefreshCw, ShieldAlert, Activity, Database, Plus, Trash2, BrainCircuit, Sparkles, MessageSquare, Wand2, Target, X, BarChart } from 'lucide-react';
 import { SearchTerm, Language } from '../types';
 import { translations } from '../translations';
 import { analyzeRShieldSimulation } from '../services/geminiService';
@@ -29,6 +28,14 @@ interface SimulationParams {
 interface RealDataPoint { 
   day: number; 
   real_I: number; 
+}
+
+// [NEW] Interface cho kết quả đánh giá mô hình
+interface FitMetrics {
+  mse: number;
+  peakErrorAbs: number;
+  peakErrorPct: number;
+  peakDayError: number;
 }
 
 // --- Constants ---
@@ -96,7 +103,6 @@ const runSEIRModelPure = (
       const incubationRate = alpha * E[i];
       
       // 3. Tốc độ hồi phục (Lưu ý: Phương trình dùng gamma * I * (I+R) / N)
-      // Đây là điểm khác biệt so với mô hình chuẩn (gamma * I)
       const recoveryRate = (gamma * I[i] * (I[i] + R[i])) / N; 
 
       // Các số hạng kiểm soát
@@ -105,16 +111,9 @@ const runSEIRModelPure = (
       const controlI = v_val * I[i];                 // v * I(t)
 
       // --- HỆ PHƯƠNG TRÌNH ---
-      // dS/dt = - Infection - u_p*S
       const dS = -infectionRate - controlS;
-
-      // dE/dt = Infection - alpha*E - rho*u_g*E
       const dE = infectionRate - incubationRate - controlE;
-
-      // dI/dt = alpha*E - Recovery - v*I
       const dI = incubationRate - recoveryRate - controlI;
-
-      // dR/dt = Recovery + v*I + u_p*S + rho*u_g*E
       const dR = recoveryRate + controlI + controlS + controlE;
 
       // Cập nhật trạng thái tiếp theo (Euler method)
@@ -155,6 +154,10 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const [analysisResult, setAnalysisResult] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isFitting, setIsFitting] = useState<boolean>(false);
+  
+  // [NEW] States cho Popup đánh giá
+  const [fitMetrics, setFitMetrics] = useState<FitMetrics | null>(null);
+  const [showMetricsPopup, setShowMetricsPopup] = useState<boolean>(false);
 
   useEffect(() => { 
     if (terms.length > 0) setTopic(terms.map(term => term.term).join(", ")); 
@@ -193,9 +196,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     return (beta * s0 * alpha) / denominator;
   }, [params.N, params.beta, params.alpha, params.rho, params.ug, params.v, realDataMap]);
 
-  // [UPDATED] Effect để lưu Rc vào params khi giá trị tính toán thay đổi
   useEffect(() => {
-      // Chỉ update nếu giá trị chênh lệch đáng kể (tránh loop vô tận do số thực)
       if (Math.abs(params.Rc - calculatedRc) > 0.000001) {
           setParams(prev => ({ ...prev, Rc: calculatedRc }));
       }
@@ -236,7 +237,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             ...prev,
             v: parseFloat((baseV * k).toFixed(3)),
             ug: parseFloat((baseUg * k).toFixed(3)),
-            // Rc sẽ tự động được update bởi useEffect ở trên sau khi v và ug thay đổi
         }));
     }
   };
@@ -247,7 +247,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
     setIsFitting(true);
 
-    // Sử dụng setTimeout để không block UI render
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
@@ -305,8 +304,46 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         }
 
         bestParams.N = Math.round(bestParams.N);
-        setParams(bestParams); // Rc sẽ tự động được tính lại và update bởi useEffect
+        setParams(bestParams); 
+        
+        // [NEW] CÁC TOÁN TÍNH CHỈ SỐ ĐÁNH GIÁ (EVALUATION METRICS)
+        const finalResults = runSEIRModelPure(bestParams, realDataMap, maxRealDay);
+        
+        let finalMaxSimVal = 0;
+        let finalPeakSimDay = 0;
+        let mseSum = 0;
+        let mseCount = 0;
+
+        finalResults.forEach(s => {
+            // @ts-ignore
+            if (s.sim_I > finalMaxSimVal) {
+                // @ts-ignore
+                finalMaxSimVal = s.sim_I;
+                finalPeakSimDay = s.day;
+            }
+            if (realDataMap.has(s.day)) {
+                const rVal = realDataMap.get(s.day)!;
+                // @ts-ignore
+                mseSum += Math.pow(rVal - s.sim_I, 2);
+                mseCount++;
+            }
+        });
+
+        const mse = mseCount > 0 ? mseSum / mseCount : 0;
+        const peakErrorAbs = Math.abs(finalMaxSimVal - maxRealVal);
+        const peakErrorPct = maxRealVal > 0 ? (peakErrorAbs / maxRealVal) * 100 : 0;
+        const peakDayError = Math.abs(finalPeakSimDay - peakRealDay);
+
+        setFitMetrics({
+            mse,
+            peakErrorAbs,
+            peakErrorPct,
+            peakDayError
+        });
+        
         setIsFitting(false);
+        setShowMetricsPopup(true); // Hiển thị popup sau khi tính toán xong
+
     }, 100);
   };
 
@@ -319,8 +356,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     try {
         const simPeak = Math.max(...chartData.map(d => d.sim_I || 0));
         const realPeak = realData.length > 0 ? Math.max(...realData.map(d => d.real_I)) : 0;
-        // Sử dụng calculatedRc để đảm bảo giá trị mới nhất, 
-        // hoặc params.Rc (lúc này đã được sync bởi useEffect)
         const res = await analyzeRShieldSimulation(topic, params, realData, simPeak, realPeak, lang, calculatedRc);
         setAnalysisResult(res);
     } catch (e: any) { setAnalysisResult("Error: " + e.message); }
@@ -337,7 +372,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
       <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-fit max-h-[90vh] overflow-y-auto">
         <div className="flex items-center gap-2 mb-4 text-blue-800 border-b pb-3"><Settings size={20} /><h2 className="text-lg font-semibold">{t.configModel}</h2></div>
         
@@ -488,7 +523,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
              ))}
         </div>
 
-        {/* --- MOVED EXPERT VIEW HERE TO SPAN FULL WIDTH --- */}
+        {/* Expert View */}
         {analysisResult && (
             <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl">
                 <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
@@ -502,6 +537,72 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
         )}
       </div>
+
+      {/* [NEW] POPUP ĐÁNH GIÁ HIỆU QUẢ MÔ HÌNH SAU KHI AUTO-FIT */}
+      {showMetricsPopup && fitMetrics && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 flex justify-between items-center text-white">
+                    <div className="flex items-center gap-2">
+                        <BarChart size={20} />
+                        <h3 className="font-bold text-lg">{lang === 'vi' ? 'Đánh giá hiệu quả mô hình' : 'Model Fit Evaluation'}</h3>
+                    </div>
+                    <button onClick={() => setShowMetricsPopup(false)} className="hover:bg-white/20 p-1.5 rounded-full transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-6 space-y-5">
+                    <p className="text-sm text-gray-600">
+                        {lang === 'vi' 
+                            ? 'Thuật toán Auto-Fit đã tìm ra bộ tham số tối ưu. Dưới đây là các chỉ số đánh giá độ lệch so với dữ liệu thực tế:' 
+                            : 'Auto-Fit algorithm found the optimal parameters. Here are the deviation metrics compared to real data:'}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-[11px] text-gray-500 font-bold uppercase mb-1">
+                                {lang === 'vi' ? 'MSE (Sai số bình phương)' : 'Mean Squared Error'}
+                            </p>
+                            <p className="text-2xl font-black text-blue-700">{formatNumber(Math.round(fitMetrics.mse))}</p>
+                        </div>
+                        
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-[11px] text-gray-500 font-bold uppercase mb-1">
+                                {lang === 'vi' ? 'Lệch thời gian đỉnh' : 'Peak Time Error'}
+                            </p>
+                            <p className="text-2xl font-black text-amber-600">
+                                {fitMetrics.peakDayError} <span className="text-sm font-medium">{lang === 'vi' ? 'ngày' : 'days'}</span>
+                            </p>
+                        </div>
+                        
+                        <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm col-span-2 flex items-center justify-between">
+                            <div>
+                                <p className="text-[11px] text-red-500 font-bold uppercase mb-1">
+                                    {lang === 'vi' ? 'Sai số lượng ca đỉnh' : 'Peak Volume Error'}
+                                </p>
+                                <div className="flex items-end gap-2">
+                                    <p className="text-2xl font-black text-red-600">{formatNumber(Math.round(fitMetrics.peakErrorAbs))}</p>
+                                    <p className="text-sm text-red-400 font-medium mb-1">
+                                        ({fitMetrics.peakErrorPct.toFixed(2)}%)
+                                    </p>
+                                </div>
+                            </div>
+                            <Target size={32} className="text-red-200" />
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={() => setShowMetricsPopup(false)} 
+                        className="w-full py-3 mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl transition-colors"
+                    >
+                        {lang === 'vi' ? 'Đóng' : 'Close'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };
