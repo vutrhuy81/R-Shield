@@ -290,6 +290,9 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
                         let maxSimVal = 0;
                         let peakSimDay = 0;
+                        let mseSumCandidate = 0;
+                        let mseCountCandidate = 0;
+
                         simResults.forEach(s => {
                             // @ts-ignore
                             if (s.sim_I > maxSimVal) {
@@ -297,11 +300,21 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                                 maxSimVal = s.sim_I;
                                 peakSimDay = s.day;
                             }
+                            if (realDataMap.has(s.day)) {
+                                const rVal = realDataMap.get(s.day)!;
+                                // @ts-ignore
+                                mseSumCandidate += Math.pow(rVal - s.sim_I, 2);
+                                mseCountCandidate++;
+                            }
                         });
 
+                        const currentMse = mseCountCandidate > 0 ? mseSumCandidate / mseCountCandidate : 0;
                         const dayError = Math.abs(peakSimDay - peakRealDay);
-                        const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / maxRealVal;
-                        const totalError = (dayError * 1000) + (heightErrorRatio * 100);
+                        const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / (maxRealVal || 1);
+
+                        // [NEW] HÀM MẤT MÁT TỐI ƯU HÓA: Cân bằng giữa tìm Đỉnh và Ôm sát đường cong (MSE)
+                        const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
+                        const totalError = (normalizedMse * 500) + (dayError * 100) + (heightErrorRatio * 100);
 
                         if (totalError < minError) {
                             minError = totalError;
