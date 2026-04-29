@@ -34,8 +34,28 @@ const getVNDateString = (date: Date) => {
   }).format(date);
 };
 
+// Khai báo thời gian timeout (5 phút = 300,000 ms)
+const SESSION_TIMEOUT = 5 * 60 * 1000; 
+
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // Khởi tạo state user từ localStorage để giữ đăng nhập khi F5
+  const [user, setUser] = useState<User | null>(() => {
+    const storedUser = localStorage.getItem('rshield_user');
+    const lastActivity = localStorage.getItem('rshield_last_activity');
+    
+    if (storedUser && lastActivity) {
+      // Nếu thời gian từ lần cuối hoạt động < 5 phút thì cho phép giữ session
+      if (Date.now() - parseInt(lastActivity) < SESSION_TIMEOUT) {
+        return JSON.parse(storedUser);
+      } else {
+        // Đã quá 5 phút, xóa rác
+        localStorage.removeItem('rshield_user');
+        localStorage.removeItem('rshield_last_activity');
+      }
+    }
+    return null;
+  });
+
   const [lang, setLang] = useState<Language>('vi');
   const t = translations[lang];  
 
@@ -61,6 +81,42 @@ const App: React.FC = () => {
   const [startDate, setStartDate] = useState<string>(getVNDateString(thirtyDaysAgo)); 
   const [endDate, setEndDate] = useState<string>(getVNDateString(today)); 
 
+  // Xử lý cơ chế Timeout 5 phút không hoạt động
+  useEffect(() => {
+    if (!user) return;
+
+    let lastUpdate = Date.now();
+
+    // Cập nhật mốc thời gian vào localStorage khi có thao tác
+    const updateActivity = () => {
+      const now = Date.now();
+      // Throttle: Chỉ ghi vào localStorage nhiều nhất 1 giây / lần để tránh quá tải trình duyệt
+      if (now - lastUpdate > 1000) {
+        localStorage.setItem('rshield_last_activity', now.toString());
+        lastUpdate = now;
+      }
+    };
+
+    // Bắt các sự kiện thể hiện người dùng đang tương tác
+    const events = ['mousemove', 'keydown', 'mousedown', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, updateActivity));
+
+    // Bộ đếm kiểm tra mỗi 5 giây xem đã quá 5 phút chưa
+    const checkTimeoutInterval = setInterval(() => {
+      const lastAct = parseInt(localStorage.getItem('rshield_last_activity') || '0');
+      if (Date.now() - lastAct > SESSION_TIMEOUT) {
+        alert(lang === 'vi' ? 'Phiên đăng nhập đã hết hạn do 5 phút không hoạt động. Vui lòng đăng nhập lại.' : 'Session expired after 5 minutes of inactivity. Please login again.');
+        handleLogout();
+      }
+    }, 5000);
+
+    return () => {
+      // Cleanup khi component unmount hoặc user thay đổi
+      events.forEach(e => window.removeEventListener(e, updateActivity));
+      clearInterval(checkTimeoutInterval);
+    };
+  }, [user, lang]);
+
   useEffect(() => {
     if (data && data.length > 0 && terms.length > 0) {
       const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -81,8 +137,23 @@ const App: React.FC = () => {
     else if (user && user.role === 'ADMIN') setActiveTab('DATA');
   }, [user]);
 
-  const handleLogin = (userData: User) => setUser(userData);
-  const handleLogout = () => { logAction(user, 'LOGOUT', {}); setUser(null); setData([]); setTerms([]); };
+  const handleLogin = (userData: User) => {
+    setUser(userData);
+    // Lưu vào LocalStorage
+    localStorage.setItem('rshield_user', JSON.stringify(userData));
+    localStorage.setItem('rshield_last_activity', Date.now().toString());
+  };
+
+  const handleLogout = () => { 
+    logAction(user, 'LOGOUT', {}); 
+    setUser(null); 
+    setData([]); 
+    setTerms([]); 
+    // Xóa LocalStorage khi đăng xuất
+    localStorage.removeItem('rshield_user');
+    localStorage.removeItem('rshield_last_activity');
+  };
+
   const toggleLang = () => setLang(prev => prev === 'vi' ? 'en' : 'vi');
   
   const handleAddTerm = (termText: string) => {
@@ -118,7 +189,6 @@ const App: React.FC = () => {
 
     try {
       const termStrings = terms.map(term => term.term);
-      // Ghi log người dùng bấm nút phân tích
       logAction(user, 'RUN_AI_ANALYSIS', { terms: termStrings, startDate, endDate });
       
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
@@ -128,7 +198,6 @@ const App: React.FC = () => {
       setGroundingMetadata(response.groundingMetadata);
       setLoadingState(LoadingState.SUCCESS);
 
-      // GHI LOG TOÀN BỘ KẾT QUẢ AI VÀ SỐ LIỆU TẠI TAB THU THẬP DỮ LIỆU
       logAction(user, 'DATA_COLLECTION_ANALYSIS', {
           searchQuery: {
               terms: termStrings,
@@ -230,7 +299,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Action Buttons for Mobile (Đã được khôi phục) */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
         {user.role === 'ADMIN' && (
           <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`p-4 rounded-full shadow-2xl transition-colors ${activeTab === 'ADMIN_PANEL' ? 'bg-blue-800' : 'bg-gray-800'} text-white`}>
