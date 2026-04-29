@@ -8,21 +8,20 @@ import { DEFAULT_REAL_DATA } from '../constants';
 import { marked } from 'marked';
 
 // --- Interfaces ---
-// Cập nhật tham số theo phương trình trong ảnh
 interface SimulationParams { 
   N: number; 
-  tau: number;       // Time delay
+  tau: number;       
   dt: number; 
   T_end: number; 
-  beta: number;      // Hệ số lây nhiễm
-  alpha: number;     // Hệ số ủ bệnh (E -> I)
-  gamma: number;     // Hệ số hồi phục
+  beta: number;      
+  alpha: number;     
+  gamma: number;     
   interventionDay: number; 
-  up: number;        // u_p: Kiểm soát S (Giáo dục/Phòng ngừa)
-  ug: number;        // u_g: Kiểm soát E (Phản bác tin đồn)
-  rho: number;       // rho: Hiệu suất của u_g
-  v: number;         // v (nu): Kiểm soát I (Chặn kỹ thuật)
-  Rc: number;        // [UPDATED] Thêm tham số Rc vào state
+  up: number;        
+  ug: number;        
+  rho: number;       
+  v: number;         
+  Rc: number;        
 }
 
 interface RealDataPoint { 
@@ -30,7 +29,6 @@ interface RealDataPoint {
   real_I: number; 
 }
 
-// [NEW] Interface cho kết quả đánh giá mô hình
 interface FitMetrics {
   mse: number;
   peakErrorAbs: number;
@@ -48,14 +46,14 @@ const DEFAULT_PARAMS: SimulationParams = {
   alpha: 0.676,    
   gamma: 0.1,    
   interventionDay: 5.0, 
-  up: 0.01,       // Default u_p
-  ug: 3.393,       // Default u_g
-  rho: 0.6,      // Default rho
-  v: 0.2,        // Default v
-  Rc: 1          // [UPDATED] Default Rc
+  up: 0.01,       
+  ug: 3.393,       
+  rho: 0.6,      
+  v: 0.2,        
+  Rc: 1          
 };
 
-// --- PURE MATH FUNCTION (Updated SEIR Model with Delay & Controls) ---
+// --- PURE MATH FUNCTION ---
 const runSEIRModelPure = (
     params: SimulationParams, 
     realDataMap: Map<number, number>, 
@@ -71,7 +69,6 @@ const runSEIRModelPure = (
     const I = new Float64Array(steps);
     const R = new Float64Array(steps);
 
-    // Initial Conditions
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
     const I0 = Math.max(1, startVal); 
     
@@ -83,47 +80,34 @@ const runSEIRModelPure = (
     for (let i = 0; i < steps - 1; i++) {
       const currentTime = i * dt;
       
-      // Xử lý biến trễ (Delay Variable)
       const idx_past = i - lagSteps;
       const S_past = idx_past >= 0 ? S[idx_past] : S[0]; 
       const I_past = idx_past >= 0 ? I[idx_past] : I[0];
 
-      // Kích hoạt tham số kiểm soát sau ngày can thiệp
       const isIntervention = currentTime >= interventionDay;
       const up_val = isIntervention ? up_active : 0;
       const ug_val = isIntervention ? ug_active : 0;
       const v_val  = isIntervention ? v_active : 0;
 
-      // --- CÁC PHƯƠNG TRÌNH TỪ HÌNH ẢNH ---
-      
-      // 1. Tốc độ lây nhiễm có trễ: beta * S(t-tau) * I(t-tau) / N
       const infectionRate = (beta * S_past * I_past) / N;
-      
-      // 2. Tốc độ chuyển từ E sang I: alpha * E(t)
       const incubationRate = alpha * E[i];
-      
-      // 3. Tốc độ hồi phục (Lưu ý: Phương trình dùng gamma * I * (I+R) / N)
       const recoveryRate = (gamma * I[i] * (I[i] + R[i])) / N; 
 
-      // Các số hạng kiểm soát
-      const controlS = up_val * S[i];                // u_p * S(t)
-      const controlE = rho * ug_val * E[i];          // rho * u_g(t) * E(t)
-      const controlI = v_val * I[i];                 // v * I(t)
+      const controlS = up_val * S[i];                
+      const controlE = rho * ug_val * E[i];          
+      const controlI = v_val * I[i];                 
 
-      // --- HỆ PHƯƠNG TRÌNH ---
       const dS = -infectionRate - controlS;
       const dE = infectionRate - incubationRate - controlE;
       const dI = incubationRate - recoveryRate - controlI;
       const dR = recoveryRate + controlI + controlS + controlE;
 
-      // Cập nhật trạng thái tiếp theo (Euler method)
       S[i + 1] = Math.max(0, S[i] + dS * dt);
       E[i + 1] = Math.max(0, E[i] + dE * dt);
       I[i + 1] = Math.max(0, I[i] + dI * dt);
       R[i + 1] = Math.max(0, R[i] + dR * dt);
     }
     
-    // Downsampling cho biểu đồ
     const resultI = [];
     for (let d = 0; d <= final_T_end; d++) {
         const idx = Math.min(Math.floor(d / dt), steps - 1);
@@ -144,9 +128,10 @@ interface RShieldTabProps {
   lang: Language; 
   realData: RealDataPoint[];
   setRealData: (data: RealDataPoint[]) => void;
+  onLog?: (action: string, details: any) => void; 
 }
 
-const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, setRealData }) => {
+const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, setRealData, onLog }) => {
   const t = translations[lang];
   const [params, setParams] = useState<SimulationParams>(DEFAULT_PARAMS);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -155,7 +140,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isFitting, setIsFitting] = useState<boolean>(false);
   
-  // [NEW] States cho Popup đánh giá
   const [fitMetrics, setFitMetrics] = useState<FitMetrics | null>(null);
   const [showMetricsPopup, setShowMetricsPopup] = useState<boolean>(false);
 
@@ -166,7 +150,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const realDataMap = useMemo(() => new Map(realData.map(d => [d.day, d.real_I])), [realData]);
   const maxRealDay = useMemo(() => realData.length > 0 ? realData[realData.length - 1].day : 0, [realData]);
 
-  // --- Run Simulation for Charting ---
   const runSimulation = useMemo(() => {
     const rawResults = runSEIRModelPure(params, realDataMap, maxRealDay);
     return rawResults.map(item => ({
@@ -181,7 +164,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
 
   useEffect(() => { setChartData(runSimulation); }, [runSimulation]);
 
-  // --- CALCULATE RC & SYNC TO PARAMS ---
   const calculatedRc = useMemo(() => {
     const { N, beta, alpha, rho, ug, v } = params;
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
@@ -202,10 +184,26 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
       }
   }, [calculatedRc, params.Rc]);
 
-  // --- AUTO TUNE RC = 1 ---
+  // Hàm Helper lấy tóm tắt mô phỏng để ghi log
+  const getSimSummary = (currentParams: SimulationParams, currentRc: number) => {
+     const data = runSEIRModelPure(currentParams, realDataMap, maxRealDay);
+     let maxSim = 0; 
+     data.forEach(d => { if (d.sim_I > maxSim) maxSim = d.sim_I; });
+     const maxReal = realData.length > 0 ? Math.max(...realData.map(d => d.real_I)) : 0;
+     return { 
+         PeakSim: Math.round(maxSim), 
+         PeakReal: maxReal, 
+         TotalInf: Math.round(data[data.length-1].sim_I), 
+         TotalRec: Math.round(data[data.length-1].sim_R), 
+         ThresholdRc: currentRc 
+     };
+  };
+
   const handleOptimizeRc = () => {
+    const oldParams = { ...params };
+    const oldSummary = getSimSummary(oldParams, calculatedRc);
+
     const { N, beta, alpha, rho, ug, v } = params;
-    
     const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1; 
     const I0 = Math.max(1, startVal);
     const E0 = I0 * 2;
@@ -233,19 +231,30 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     }
 
     if (k > 0 && isFinite(k)) {
-        setParams(prev => ({
-            ...prev,
+        const newParams = {
+            ...params,
             v: parseFloat((baseV * k).toFixed(3)),
             ug: parseFloat((baseUg * k).toFixed(3)),
-        }));
+        };
+        setParams(newParams);
+
+        // Ghi Log
+        if (onLog) {
+            onLog('RSHIELD_AUTO_FIT_RC', {
+                rumorTopic: topic,
+                before: { params: oldParams, summary: oldSummary },
+                after: { params: newParams, summary: getSimSummary(newParams, 1) }
+            });
+        }
     }
   };
 
-  // --- SUPER-POWERED AUTO-FITTING ---
   const handleAutoFit = async () => {
     if (realData.length < 3) return;
-
     setIsFitting(true);
+    
+    const oldParams = { ...params };
+    const oldSummary = getSimSummary(oldParams, calculatedRc);
 
     setTimeout(() => {
         let maxRealVal = 0;
@@ -306,7 +315,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         bestParams.N = Math.round(bestParams.N);
         setParams(bestParams); 
         
-        // [NEW] CÁC TOÁN TÍNH CHỈ SỐ ĐÁNH GIÁ (EVALUATION METRICS)
         const finalResults = runSEIRModelPure(bestParams, realDataMap, maxRealDay);
         
         let finalMaxSimVal = 0;
@@ -329,20 +337,25 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             }
         });
 
-        const mse = mseCount > 0 ? mseSum / mseCount : 0;
-        const peakErrorAbs = Math.abs(finalMaxSimVal - maxRealVal);
-        const peakErrorPct = maxRealVal > 0 ? (peakErrorAbs / maxRealVal) * 100 : 0;
-        const peakDayError = Math.abs(finalPeakSimDay - peakRealDay);
+        const metrics = {
+            mse: mseCount > 0 ? mseSum / mseCount : 0,
+            peakErrorAbs: Math.abs(finalMaxSimVal - maxRealVal),
+            peakErrorPct: maxRealVal > 0 ? (Math.abs(finalMaxSimVal - maxRealVal) / maxRealVal) * 100 : 0,
+            peakDayError: Math.abs(finalPeakSimDay - peakRealDay)
+        };
 
-        setFitMetrics({
-            mse,
-            peakErrorAbs,
-            peakErrorPct,
-            peakDayError
-        });
-        
+        setFitMetrics(metrics);
         setIsFitting(false);
-        setShowMetricsPopup(true); // Hiển thị popup sau khi tính toán xong
+        setShowMetricsPopup(true);
+
+        // Ghi Log
+        if (onLog) {
+            onLog('RSHIELD_AUTO_FIT_PRO', {
+                rumorTopic: topic,
+                before: { params: oldParams, summary: oldSummary },
+                after: { params: bestParams, summary: getSimSummary(bestParams, calculatedRc), evaluationMetrics: metrics }
+            });
+        }
 
     }, 100);
   };
@@ -358,6 +371,16 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         const realPeak = realData.length > 0 ? Math.max(...realData.map(d => d.real_I)) : 0;
         const res = await analyzeRShieldSimulation(topic, params, realData, simPeak, realPeak, lang, calculatedRc);
         setAnalysisResult(res);
+
+        // Ghi Log Tư Vấn Chuyên Gia
+        if (onLog) {
+            onLog('RSHIELD_AI_CONSULTATION', {
+                rumorTopic: topic,
+                currentParams: params,
+                simulationSummary: getSimSummary(params, calculatedRc),
+                aiExpertReport: res
+            });
+        }
     } catch (e: any) { setAnalysisResult("Error: " + e.message); }
     finally { setIsAnalyzing(false); }
   };
@@ -377,7 +400,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         <div className="flex items-center gap-2 mb-4 text-blue-800 border-b pb-3"><Settings size={20} /><h2 className="text-lg font-semibold">{t.configModel}</h2></div>
         
         <div className="space-y-6">
-          {/* Data Input Section */}
           <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
              <div className="flex items-center justify-between mb-3">
                <h3 className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1"><Database size={14} /> {t.realData}</h3>
@@ -397,7 +419,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
              </div>
           </div>
 
-          {/* Core Parameters Section */}
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 relative">
             <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-bold text-blue-600 uppercase">{t.spreadParams}</h3>
@@ -425,7 +446,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
-          {/* Environment Parameters */}
           <div className="bg-gray-50 p-3 rounded-lg border">
             <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">{t.envTime}</h3>
             <div className="space-y-3">
@@ -440,7 +460,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
-          {/* Strategy / Intervention Parameters */}
           <div className="bg-red-50 p-3 rounded-lg border border-red-100 relative">
             <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xs font-bold text-red-600 uppercase flex items-center gap-1"><ShieldAlert size={14} /> {t.shieldStrategy}</h3>
@@ -523,7 +542,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
              ))}
         </div>
 
-        {/* Expert View */}
         {analysisResult && (
             <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 shadow-xl">
                 <div className="bg-gradient-to-r from-indigo-600 to-blue-700 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
@@ -538,7 +556,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         )}
       </div>
 
-      {/* [NEW] POPUP ĐÁNH GIÁ HIỆU QUẢ MÔ HÌNH SAU KHI AUTO-FIT */}
       {showMetricsPopup && fitMetrics && (
         <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
