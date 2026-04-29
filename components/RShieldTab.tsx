@@ -29,8 +29,10 @@ interface RealDataPoint {
   real_I: number; 
 }
 
+// [UPDATED] Thêm chỉ số RMSE vào giao diện đánh giá
 interface FitMetrics {
   mse: number;
+  rmse: number;
   peakErrorAbs: number;
   peakErrorPct: number;
   peakDayError: number;
@@ -184,7 +186,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
       }
   }, [calculatedRc, params.Rc]);
 
-  // Hàm Helper lấy tóm tắt mô phỏng để ghi log
   const getSimSummary = (currentParams: SimulationParams, currentRc: number) => {
      const data = runSEIRModelPure(currentParams, realDataMap, maxRealDay);
      let maxSim = 0; 
@@ -238,7 +239,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         };
         setParams(newParams);
 
-        // Ghi Log
         if (onLog) {
             onLog('RSHIELD_AUTO_FIT_RC', {
                 rumorTopic: topic,
@@ -312,7 +312,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         const dayError = Math.abs(peakSimDay - peakRealDay);
                         const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / (maxRealVal || 1);
 
-                        // [NEW] HÀM MẤT MÁT TỐI ƯU HÓA: Cân bằng giữa tìm Đỉnh và Ôm sát đường cong (MSE)
+                        // Hàm mất mát tối ưu hóa
                         const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
                         const totalError = (normalizedMse * 500) + (dayError * 100) + (heightErrorRatio * 100);
 
@@ -350,8 +350,13 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             }
         });
 
+        // [UPDATED] Tính toán MSE và RMSE
+        const mse = mseCount > 0 ? mseSum / mseCount : 0;
+        const rmse = Math.sqrt(mse);
+
         const metrics = {
-            mse: mseCount > 0 ? mseSum / mseCount : 0,
+            mse,
+            rmse,
             peakErrorAbs: Math.abs(finalMaxSimVal - maxRealVal),
             peakErrorPct: maxRealVal > 0 ? (Math.abs(finalMaxSimVal - maxRealVal) / maxRealVal) * 100 : 0,
             peakDayError: Math.abs(finalPeakSimDay - peakRealDay)
@@ -361,7 +366,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         setIsFitting(false);
         setShowMetricsPopup(true);
 
-        // Ghi Log
         if (onLog) {
             onLog('RSHIELD_AUTO_FIT_PRO', {
                 rumorTopic: topic,
@@ -385,7 +389,6 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         const res = await analyzeRShieldSimulation(topic, params, realData, simPeak, realPeak, lang, calculatedRc);
         setAnalysisResult(res);
 
-        // Ghi Log Tư Vấn Chuyên Gia
         if (onLog) {
             onLog('RSHIELD_AI_CONSULTATION', {
                 rumorTopic: topic,
@@ -569,6 +572,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         )}
       </div>
 
+      {/* [UPDATED] Giao diện Popup Đánh giá (Grid 2x2) */}
       {showMetricsPopup && fitMetrics && (
         <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
@@ -589,36 +593,48 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                             : 'Auto-Fit algorithm found the optimal parameters. Here are the deviation metrics compared to real data:'}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm">
-                            <p className="text-[11px] text-gray-500 font-bold uppercase mb-1">
-                                {lang === 'vi' ? 'MSE (Sai số bình phương)' : 'Mean Squared Error'}
+                    {/* Lưới 2x2 chứa 4 chỉ số */}
+                    <div className="grid grid-cols-2 gap-3">
+                        {/* 1. MSE */}
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">
+                                {lang === 'vi' ? 'MSE (Sai số B.Phương)' : 'Mean Squared Error'}
                             </p>
-                            <p className="text-2xl font-black text-blue-700">{formatNumber(Math.round(fitMetrics.mse))}</p>
+                            <p className="text-xl font-black text-blue-700">{formatNumber(Math.round(fitMetrics.mse))}</p>
                         </div>
                         
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm">
-                            <p className="text-[11px] text-gray-500 font-bold uppercase mb-1">
+                        {/* 2. RMSE */}
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">
+                                {lang === 'vi' ? 'RMSE (Sai số Chuẩn)' : 'Root Mean Square Error'}
+                            </p>
+                            <p className="text-xl font-black text-indigo-600">{formatNumber(Math.round(fitMetrics.rmse))}</p>
+                        </div>
+                        
+                        {/* 3. Lệch thời gian */}
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">
                                 {lang === 'vi' ? 'Lệch thời gian đỉnh' : 'Peak Time Error'}
                             </p>
-                            <p className="text-2xl font-black text-amber-600">
+                            <p className="text-xl font-black text-amber-600">
                                 {fitMetrics.peakDayError} <span className="text-sm font-medium">{lang === 'vi' ? 'ngày' : 'days'}</span>
                             </p>
                         </div>
                         
-                        <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm col-span-2 flex items-center justify-between">
-                            <div>
-                                <p className="text-[11px] text-red-500 font-bold uppercase mb-1">
+                        {/* 4. Lệch số lượng */}
+                        <div className="bg-red-50 p-3 rounded-xl border border-red-100 shadow-sm relative overflow-hidden">
+                            <div className="relative z-10">
+                                <p className="text-[10px] text-red-500 font-bold uppercase mb-1">
                                     {lang === 'vi' ? 'Sai số lượng ca đỉnh' : 'Peak Volume Error'}
                                 </p>
-                                <div className="flex items-end gap-2">
-                                    <p className="text-2xl font-black text-red-600">{formatNumber(Math.round(fitMetrics.peakErrorAbs))}</p>
-                                    <p className="text-sm text-red-400 font-medium mb-1">
+                                <div className="flex items-baseline gap-1">
+                                    <p className="text-xl font-black text-red-600">{formatNumber(Math.round(fitMetrics.peakErrorAbs))}</p>
+                                    <p className="text-xs text-red-400 font-medium mb-1">
                                         ({fitMetrics.peakErrorPct.toFixed(2)}%)
                                     </p>
                                 </div>
                             </div>
-                            <Target size={32} className="text-red-200" />
+                            <Target size={40} className="text-red-200 absolute right-[-10px] bottom-[-10px] opacity-50 z-0" />
                         </div>
                     </div>
 
