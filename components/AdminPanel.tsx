@@ -1,15 +1,18 @@
 // src/components/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { Users, Activity, Mail, Plus, Edit, X, Save } from 'lucide-react';
+import { Users, Activity, Mail, Plus, Edit, X, Save, FileJson } from 'lucide-react';
 
 export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'EMAIL'>('USERS');
   const [mailContent, setMailContent] = useState('');
-  const [isSendingMail, setIsSendingMail] = useState(false); // State loading cho nút gửi email
+  const [isSendingMail, setIsSendingMail] = useState(false);
 
-  // States cho Modal Thêm/Sửa User
+  // States cho Log Detail Modal (Từ bản New)
+  const [selectedLogDetail, setSelectedLogDetail] = useState<any>(null);
+
+  // States cho Modal Thêm/Sửa User (Từ bản Gốc)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,7 +59,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
       const data = await res.json();
       if (res.ok) {
         alert('✅ ' + data.message);
-        setMailContent(''); // Xóa nội dung sau khi gửi thành công
+        setMailContent(''); 
       } else {
         alert('❌ Lỗi: ' + data.message);
       }
@@ -100,12 +103,20 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
 
       alert(editingUser ? 'Cập nhật thành công!' : 'Tạo mới thành công!');
       setIsModalOpen(false);
-      fetchUsers(); // Tải lại danh sách
+      fetchUsers(); 
     } catch (error: any) {
       alert('Lỗi: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Helper format Action Badge (Từ bản New)
+  const getActionColor = (action: string) => {
+      if(action.includes('RSHIELD')) return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      if(action.includes('DATA')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      if(action.includes('LOGIN') || action.includes('LOGOUT')) return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-blue-100 text-blue-800 border-blue-200';
   };
 
   return (
@@ -116,7 +127,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         <button onClick={() => setActiveTab('EMAIL')} className={`flex items-center gap-2 ${activeTab === 'EMAIL' ? 'text-blue-600 font-bold' : 'text-gray-500 hover:text-blue-500'}`}><Mail size={18}/> Gửi Email Hàng Loạt</button>
       </div>
 
-      {/* TAB: QUẢN LÝ USER */}
+      {/* TAB: QUẢN LÝ USER (Từ bản Gốc) */}
       {activeTab === 'USERS' && (
         <div className="animate-in fade-in">
           <div className="flex justify-between items-center mb-4">
@@ -155,23 +166,77 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         </div>
       )}
 
-      {/* TAB: XEM NHẬT KÝ */}
+      {/* TAB: XEM NHẬT KÝ (Từ bản New - Đã nâng cấp) */}
       {activeTab === 'LOGS' && (
-        <div className="max-h-[500px] overflow-y-auto bg-gray-50 p-4 rounded-lg border animate-in fade-in">
-          {logs.length === 0 ? <p className="text-center text-gray-500">Chưa có nhật ký nào.</p> : logs.map((log: any) => (
-            <div key={log._id} className="border-b border-gray-200 py-3 text-sm flex flex-col md:flex-row md:items-center gap-2">
-              <span className="text-gray-400 font-mono text-xs w-40">[{new Date(log.createdAt).toLocaleString('vi-VN')}]</span> 
-              <strong className="text-gray-700 w-32">{log.username}</strong> 
-              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold uppercase w-fit">{log.action}</span>
-              <span className="text-gray-500 truncate flex-1" title={JSON.stringify(log.details)}>{JSON.stringify(log.details)}</span>
-            </div>
-          ))}
+        <div className="bg-white border rounded-lg overflow-hidden animate-in fade-in">
+          <table className="w-full text-sm text-left text-gray-600">
+            <thead className="bg-gray-50 text-gray-700 uppercase text-xs font-bold border-b">
+               <tr>
+                   <th className="px-4 py-3 w-40">Thời gian</th>
+                   <th className="px-4 py-3 w-32">Tài khoản</th>
+                   <th className="px-4 py-3">Loại hành động</th>
+                   <th className="px-4 py-3 text-right">Chi tiết</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {logs.length === 0 ? <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">Chưa có nhật ký nào.</td></tr> : 
+               logs.map((log: any) => (
+                <tr key={log._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">{new Date(log.createdAt).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-3 font-bold text-gray-800">{log.username}</td>
+                  <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${getActionColor(log.action)}`}>
+                          {log.action}
+                      </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                      <button 
+                          onClick={() => setSelectedLogDetail(log)}
+                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                      >
+                          <FileJson size={14}/> Xem Payload
+                      </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* TAB: EMAIL */}
+      {/* MODAL HIỂN THỊ CHI TIẾT LOG TỪNG PHIÊN CHẠY (Từ bản New) */}
+      {selectedLogDetail && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                      <div>
+                          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                              Chi tiết nhật ký hệ thống
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getActionColor(selectedLogDetail.action)}`}>
+                                  {selectedLogDetail.action}
+                              </span>
+                          </h3>
+                          <p className="text-xs text-gray-500 mt-1">User: <b>{selectedLogDetail.username}</b> • Time: {new Date(selectedLogDetail.createdAt).toLocaleString('vi-VN')}</p>
+                      </div>
+                      <button onClick={() => setSelectedLogDetail(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="p-0 overflow-y-auto flex-1 bg-gray-900">
+                      <pre className="text-xs text-green-400 font-mono p-6 whitespace-pre-wrap">
+                          {JSON.stringify(selectedLogDetail.details, null, 2)}
+                      </pre>
+                  </div>
+                  
+                  <div className="p-3 border-t bg-gray-50 flex justify-end">
+                      <button onClick={() => setSelectedLogDetail(null)} className="px-5 py-2 bg-gray-800 text-white text-sm font-medium rounded hover:bg-gray-700">Đóng</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* TAB: EMAIL (Từ bản Gốc) */}
       {activeTab === 'EMAIL' && (
-        <div className="flex flex-col gap-4 animate-in fade-in max-w-3xl">
+        <div className="flex flex-col gap-4 animate-in fade-in max-w-3xl mt-4">
           <label className="text-sm font-semibold text-gray-700">Soạn thông báo hệ thống</label>
           <textarea 
             className="w-full border rounded-lg p-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all min-h-[150px]" 
@@ -190,7 +255,7 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         </div>
       )}
 
-      {/* --- MODAL THÊM/SỬA USER --- */}
+      {/* --- MODAL THÊM/SỬA USER (Từ bản Gốc) --- */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
