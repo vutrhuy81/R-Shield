@@ -177,9 +177,11 @@ const App: React.FC = () => {
         return; 
     }
 
+    const termStrings = terms.map(term => term.term);
+
     if (dataSource === 'GOOGLE_TRENDS') {
-        const termStrings = terms.map(term => encodeURIComponent(term.term)).join(',');
-        window.open(`https://trends.google.com/explore?q=${termStrings}&date=${startDate}%20${endDate}&geo=${geoLocation}`, '_blank');
+        const urlTerms = termStrings.map(term => encodeURIComponent(term)).join(',');
+        window.open(`https://trends.google.com/explore?q=${urlTerms}&date=${startDate}%20${endDate}&geo=${geoLocation}`, '_blank');
         logAction(user, 'OPEN_GOOGLE_TRENDS', { terms: termStrings });
         return;
     }
@@ -187,11 +189,40 @@ const App: React.FC = () => {
     setLoadingState(LoadingState.LOADING);
     setErrorMessage(""); setSummary(""); setGroundingMetadata(null); setData([]);
 
+    // =========================================================================
+    // ÁP DỤNG CACHING THEO PHIÊN LÀM VIỆC ĐỂ ĐẢM BẢO TÍNH ĐỒNG NHẤT
+    // =========================================================================
+    const cacheKey = `rshield_cache_${termStrings.slice().sort().join('|')}_${startDate}_${endDate}_${geoLocation}_${searchType}_${lang}`;
+    const cachedData = sessionStorage.getItem(cacheKey);
+
+    if (cachedData) {
+        try {
+            const parsedResponse = JSON.parse(cachedData);
+            setData(parsedResponse.data);
+            setSummary(parsedResponse.summary);
+            setGroundingMetadata(parsedResponse.groundingMetadata);
+            setLoadingState(LoadingState.SUCCESS);
+            
+            // Ghi Log ngay cả khi dùng dữ liệu từ Cache
+            logAction(user, 'RUN_AI_ANALYSIS_CACHED', { terms: termStrings, startDate, endDate });
+            logAction(user, 'DATA_COLLECTION_ANALYSIS_CACHED', {
+                searchQuery: { terms: termStrings, dateRange: `${startDate} to ${endDate}`, location: geoLocation, type: searchType },
+                aiAnalysisReport: parsedResponse.summary
+            });
+            
+            return parsedResponse;
+        } catch (e) {
+            console.error("Lỗi đọc bộ nhớ cache", e);
+        }
+    }
+
     try {
-      const termStrings = terms.map(term => term.term);
       logAction(user, 'RUN_AI_ANALYSIS', { terms: termStrings, startDate, endDate });
       
       const response = await fetchTrendData(termStrings, startDate, endDate, geoLocation, searchType, lang);
+
+      // Lưu trữ kết quả AI vừa sinh ra vào Cache
+      sessionStorage.setItem(cacheKey, JSON.stringify(response));
 
       setData(response.data);
       setSummary(response.summary);
@@ -199,12 +230,7 @@ const App: React.FC = () => {
       setLoadingState(LoadingState.SUCCESS);
 
       logAction(user, 'DATA_COLLECTION_ANALYSIS', {
-          searchQuery: {
-              terms: termStrings,
-              dateRange: `${startDate} to ${endDate}`,
-              location: geoLocation,
-              type: searchType
-          },
+          searchQuery: { terms: termStrings, dateRange: `${startDate} to ${endDate}`, location: geoLocation, type: searchType },
           aiAnalysisReport: response.summary,
           googleSources: response.groundingMetadata?.groundingChunks?.filter((c: any) => c.web).map((c: any) => ({ title: c.web.title, url: c.web.uri })) || [],
           estimatedReachData: response.data.map(d => ({
@@ -299,6 +325,7 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* Floating Action Buttons for Mobile */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 md:hidden z-40">
         {user.role === 'ADMIN' && (
           <button onClick={() => setActiveTab('ADMIN_PANEL')} className={`p-4 rounded-full shadow-2xl transition-colors ${activeTab === 'ADMIN_PANEL' ? 'bg-blue-800' : 'bg-gray-800'} text-white`}>
