@@ -2,12 +2,27 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Activity, Mail, Plus, Edit, X, Save, FileJson } from 'lucide-react';
 
+const TOKEN_STORAGE_KEY = 'rshield_token';
+
+function getStoredToken(user: any): string {
+  return user?.token || localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+}
+
+async function parseJsonSafely(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
 export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'EMAIL'>('USERS');
   const [mailContent, setMailContent] = useState('');
   const [isSendingMail, setIsSendingMail] = useState(false);
+  const [adminError, setAdminError] = useState('');
 
   // States cho Log Detail Modal (Từ bản New)
   const [selectedLogDetail, setSelectedLogDetail] = useState<any>(null);
@@ -24,47 +39,87 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
     isActive: true
   });
 
+  const token = getStoredToken(user);
+  const isAdmin = user?.role === 'ADMIN';
+
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+
   // --- Hàm Fetch Dữ Liệu ---
-  const fetchUsers = () => fetch('/api/users').then(res => res.json()).then(setUsers);
+  const handleProtectedApiError = async (res: Response, fallbackMessage: string) => {
+    const data = await parseJsonSafely(res);
+    const retryAfter = res.headers.get('Retry-After');
+    if (res.status === 401) {
+      throw new Error('Phiên đăng nhập đã hết hạn hoặc token không hợp lệ. Vui lòng đăng nhập lại.');
+    }
+    if (res.status === 403) {
+      throw new Error('Bạn không có quyền truy cập chức năng quản trị này.');
+    }
+    if (res.status === 429) {
+      throw new Error(data.message || `Quá nhiều yêu cầu. Thử lại sau ${retryAfter || '?'} giây.`);
+    }
+    throw new Error(data.message || fallbackMessage);
+  };
+
+  const fetchUsers = async () => {
+    if (!isAdmin || !token) return;
+    setAdminError('');
+    try {
+      const res = await fetch('/api/users', { headers: authHeaders });
+      if (!res.ok) await handleProtectedApiError(res, 'Không thể tải danh sách người dùng.');
+      const data = await res.json();
+      setUsers(data);
+    } catch (error: any) {
+      console.error('Không thể tải users:', error);
+      setAdminError(error.message);
+    }
+  };
 
   const fetchLogs = async () => {
+    if (!isAdmin || !token) return;
+    setAdminError('');
     try {
-      const res = await fetch('/api/logs');
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data);
-      }
-    } catch (error) {
-      console.error("Không thể tải nhật ký:", error);
+      const res = await fetch('/api/logs', { headers: authHeaders });
+      if (!res.ok) await handleProtectedApiError(res, 'Không thể tải nhật ký.');
+      const data = await res.json();
+      setLogs(data);
+    } catch (error: any) {
+      console.error('Không thể tải nhật ký:', error);
+      setAdminError(error.message);
     }
   };
 
   useEffect(() => {
+    if (!isAdmin || !token) return;
     if (activeTab === 'USERS') fetchUsers();
     if (activeTab === 'LOGS') fetchLogs();
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isAdmin, token]);
 
   // --- Hàm Xử Lý Gửi Email ---
   const handleSendMail = async () => {
     if (!mailContent.trim()) return alert('Vui lòng nhập nội dung!');
-    
+    if (!isAdmin || !token) return alert('Bạn không có quyền gửi email hệ thống.');
+
     setIsSendingMail(true);
     try {
       const res = await fetch('/api/emails/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ subject: 'Thông báo từ hệ thống R-SHIELD', message: mailContent })
       });
-      
-      const data = await res.json();
+
+      const data = await parseJsonSafely(res);
       if (res.ok) {
-        alert('✅ ' + data.message);
-        setMailContent(''); 
+        alert('✅ ' + (data.message || 'Gửi email thành công.'));
+        setMailContent('');
       } else {
-        alert('❌ Lỗi: ' + data.message);
+        await handleProtectedApiError(res, 'Không thể gửi email.');
       }
-    } catch (error) {
-      alert('❌ Lỗi kết nối mạng, không thể gửi email.');
+    } catch (error: any) {
+      alert('❌ Lỗi: ' + (error.message || 'Lỗi kết nối mạng, không thể gửi email.'));
     } finally {
       setIsSendingMail(false);
     }
@@ -85,6 +140,8 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
 
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin || !token) return alert('Bạn không có quyền quản lý người dùng.');
+
     setIsSubmitting(true);
     try {
       const method = editingUser ? 'PUT' : 'POST';
@@ -92,18 +149,17 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
 
       const res = await fetch('/api/users', {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify(body)
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Lỗi hệ thống');
+        await handleProtectedApiError(res, 'Lỗi hệ thống');
       }
 
       alert(editingUser ? 'Cập nhật thành công!' : 'Tạo mới thành công!');
       setIsModalOpen(false);
-      fetchUsers(); 
+      fetchUsers();
     } catch (error: any) {
       alert('Lỗi: ' + error.message);
     } finally {
@@ -119,6 +175,22 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
       return 'bg-blue-100 text-blue-800 border-blue-200';
   };
 
+  if (!isAdmin) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm">
+        <b>Không có quyền truy cập.</b> Chức năng quản trị chỉ dành cho tài khoản ADMIN.
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 p-4 rounded-xl text-sm">
+        Không tìm thấy token xác thực. Vui lòng đăng nhập lại.
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative">
       <div className="flex gap-4 border-b pb-4 mb-4">
@@ -126,6 +198,12 @@ export const AdminPanel: React.FC<{ user: any }> = ({ user }) => {
         <button onClick={() => setActiveTab('LOGS')} className={`flex items-center gap-2 ${activeTab === 'LOGS' ? 'text-blue-600 font-bold' : 'text-gray-500 hover:text-blue-500'}`}><Activity size={18}/> Xem Nhật Ký</button>
         <button onClick={() => setActiveTab('EMAIL')} className={`flex items-center gap-2 ${activeTab === 'EMAIL' ? 'text-blue-600 font-bold' : 'text-gray-500 hover:text-blue-500'}`}><Mail size={18}/> Gửi Email Hàng Loạt</button>
       </div>
+
+      {adminError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+          {adminError}
+        </div>
+      )}
 
       {/* TAB: QUẢN LÝ USER (Từ bản Gốc) */}
       {activeTab === 'USERS' && (
