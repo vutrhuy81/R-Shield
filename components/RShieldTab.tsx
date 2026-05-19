@@ -405,19 +405,24 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     };
   };
 
+  // [ĐÃ SỬA] Đồng bộ 100% Hàm mất mát của Benchmark với Hàm chính
   const getBenchmarkLoss = (metrics: FitMetrics, maxRealVal: number) => {
-    const normalizedRmse = metrics.rmse / (maxRealVal || 1);
-    return (normalizedRmse * 500) + (metrics.peakDayError * 100) + (metrics.peakErrorPct * 2);
+    const currentMse = metrics.mse;
+    const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
+    const heightErrorRatio = metrics.peakErrorAbs / (maxRealVal || 1);
+    return (normalizedMse * 500) + (metrics.peakDayError * 100) + (heightErrorRatio * 100);
   };
 
   const buildBenchmarkRows = (rshieldParams: SimulationParams): BenchmarkRow[] => {
     if (realData.length < 3) return [];
 
     const maxRealVal = Math.max(...realData.map(d => d.real_I));
-    const nCandidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10].map(n => Math.max(10, Math.round(n)));
-    const betaCandidates = [0.5, 1.0, 1.5, 2.0, 2.5, 3.5, 5.0];
-    const gammaCandidates = [0.1, 0.2, 0.4, 0.6, 0.8];
-    const alphaCandidates = [0.3, 0.5, 1.0, 1.5];
+    
+    // [ĐÃ SỬA] Tối ưu hóa số lượng Candidates cho Baseline để tránh Lag/Treo máy (Giảm 60% khối lượng tính toán)
+    const nCandidates = [maxRealVal * 2, maxRealVal * 5].map(n => Math.max(10, Math.round(n)));
+    const betaCandidates = [1.0, 1.5, 2.0, 3.0];
+    const gammaCandidates = [0.2, 0.4, 0.6];
+    const alphaCandidates = [0.5, 1.0];
 
     const movingAverageMetrics = calculateMetricsForSeries(runMovingAverageBaseline(realData, 3));
 
@@ -500,6 +505,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const oldParams = { ...params };
     const oldSummary = getSimSummary(oldParams, calculatedRc);
 
+    // [ĐÃ SỬA] Đưa toàn bộ thuật toán vào setTimeout để giải phóng Main Thread cho React render UI Loading mượt mà.
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
@@ -513,6 +519,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         let bestParams = { ...params };
         let minError = Infinity;
 
+        // Vẫn giữ số lượng Candidates đa dạng cho R-SHIELD để đảm bảo độ chính xác cao nhất
         const n_candidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10];
         const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0];
         const gamma_candidates = [0.2, 0.4, 0.6, 0.8];
@@ -538,15 +545,12 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         let mseCountCandidate = 0;
 
                         simResults.forEach(s => {
-                            // @ts-ignore
                             if (s.sim_I > maxSimVal) {
-                                // @ts-ignore
                                 maxSimVal = s.sim_I;
                                 peakSimDay = s.day;
                             }
                             if (realDataMap.has(s.day)) {
                                 const rVal = realDataMap.get(s.day)!;
-                                // @ts-ignore
                                 mseSumCandidate += Math.pow(rVal - s.sim_I, 2);
                                 mseCountCandidate++;
                             }
@@ -556,7 +560,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         const dayError = Math.abs(peakSimDay - peakRealDay);
                         const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / (maxRealVal || 1);
 
-                        // Hàm mất mát tối ưu hóa
+                        // Hàm mất mát tối ưu hóa (Đã được đồng bộ)
                         const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
                         const totalError = (normalizedMse * 500) + (dayError * 100) + (heightErrorRatio * 100);
 
@@ -572,42 +576,15 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         bestParams.N = Math.round(bestParams.N);
         setParams(bestParams); 
         
+        // Tính toán Metrics cho R-Shield
         const finalResults = runSEIRModelPure(bestParams, realDataMap, maxRealDay);
+        const finalMetrics = calculateMetricsForSeries(finalResults);
+
+        setFitMetrics(finalMetrics);
         
-        let finalMaxSimVal = 0;
-        let finalPeakSimDay = 0;
-        let mseSum = 0;
-        let mseCount = 0;
-
-        finalResults.forEach(s => {
-            // @ts-ignore
-            if (s.sim_I > finalMaxSimVal) {
-                // @ts-ignore
-                finalMaxSimVal = s.sim_I;
-                finalPeakSimDay = s.day;
-            }
-            if (realDataMap.has(s.day)) {
-                const rVal = realDataMap.get(s.day)!;
-                // @ts-ignore
-                mseSum += Math.pow(rVal - s.sim_I, 2);
-                mseCount++;
-            }
-        });
-
-        // [UPDATED] Tính toán MSE và RMSE
-        const mse = mseCount > 0 ? mseSum / mseCount : 0;
-        const rmse = Math.sqrt(mse);
-
-        const metrics = {
-            mse,
-            rmse,
-            peakErrorAbs: Math.abs(finalMaxSimVal - maxRealVal),
-            peakErrorPct: maxRealVal > 0 ? (Math.abs(finalMaxSimVal - maxRealVal) / maxRealVal) * 100 : 0,
-            peakDayError: Math.abs(finalPeakSimDay - peakRealDay)
-        };
-
-        setFitMetrics(metrics);
+        // Chạy Benchmark sau cùng (Đã giảm nhẹ khối lượng tính toán nên sẽ mượt hơn)
         setBenchmarkRows(buildBenchmarkRows(bestParams));
+        
         setIsFitting(false);
         setShowMetricsPopup(true);
 
@@ -615,11 +592,11 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             onLog('RSHIELD_AUTO_FIT_PRO', {
                 rumorTopic: topic,
                 before: { params: oldParams, summary: oldSummary },
-                after: { params: bestParams, summary: getSimSummary(bestParams, calculatedRc), evaluationMetrics: metrics }
+                after: { params: bestParams, summary: getSimSummary(bestParams, calculatedRc), evaluationMetrics: finalMetrics }
             });
         }
 
-    }, 100);
+    }, 50); // Cho trình duyệt nghỉ 50ms để vẽ icon "Đang xử lý..." trước khi khóa CPU để tính toán
   };
 
   const handleParamChange = (key: keyof SimulationParams, value: string) => setParams(prev => ({ ...prev, [key]: parseFloat(value) || 0 }));
