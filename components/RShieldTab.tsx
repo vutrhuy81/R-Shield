@@ -384,7 +384,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const currentMse = metrics.mse;
     const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
     const heightErrorRatio = metrics.peakErrorAbs / (maxRealVal || 1);
-    return (normalizedMse * 1000) + (metrics.peakDayError * 200) + (heightErrorRatio * 300);
+    return (normalizedMse * 2000) + (metrics.peakDayError * 200) + (heightErrorRatio * 300);
   };
 
   const buildBenchmarkRows = (rshieldParams: SimulationParams): BenchmarkRow[] => {
@@ -394,7 +394,10 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     
     // Tối giản số vòng lặp Benchmark để UI không bị đơ, nhưng vẫn quét đúng vùng trọng tâm
     const nCandidates = [maxRealVal * 2, maxRealVal * 4].map(n => Math.max(10, Math.round(n)));
-    const betaCandidates = [1.0, 1.5, 2.5, 3.5];
+    //const betaCandidates = [1.0, 1.5, 2.5, 3.5];
+    // Thay vì beta cứng nhắc, hãy dùng loop để tạo dải beta chi tiết hơn
+    const betaCandidates = [];
+    for (let b = 0.5; b <= 5.0; b += 0.1) betaCandidates.push(b); // Tăng mật độ tìm kiếm từ 0.5 đến 5.0 với bước nhảy 0.1
     const gammaCandidates = [0.2, 0.4, 0.6];
     const alphaCandidates = [0.5, 1.0];
 
