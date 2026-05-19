@@ -384,7 +384,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const currentMse = metrics.mse;
     const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
     const heightErrorRatio = metrics.peakErrorAbs / (maxRealVal || 1);
-    return (normalizedMse * 1000) + (metrics.peakDayError * 200) + (heightErrorRatio * 300);
+    return (normalizedMse * 5000) + (metrics.peakDayError * 500) + (heightErrorRatio * 500);
   };
 
   const buildBenchmarkRows = (rshieldParams: SimulationParams): BenchmarkRow[] => {
