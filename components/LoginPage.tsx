@@ -9,41 +9,63 @@ interface LoginPageProps {
   onToggleLang: () => void;
 }
 
+const TOKEN_STORAGE_KEY = 'rshield_token';
+const USER_STORAGE_KEY = 'rshield_user';
+
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, lang, onToggleLang }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const t = translations[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isLoading) return;
+
     setIsLoading(true);
     setError('');
+    setRetryAfter(null);
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: username.trim(), password }),
       });
 
-      const data = await res.json().catch(() => ({}));
-      
+      // Kiểm tra HTTP Status trước khi parse JSON
       if (!res.ok) {
-        // Xử lý lỗi Rate Limit (429) & Brute-force Lockout
         if (res.status === 429) {
-            throw new Error(lang === 'vi' ? 'Bạn thao tác quá nhanh hoặc tài khoản đã bị khóa do nhập sai 5 lần. Vui lòng đợi 15 phút.' : 'Too many attempts. Account temporarily locked for 15 mins.');
+           const retrySeconds = res.headers.get('Retry-After');
+           const waitMinutes = retrySeconds ? Math.ceil(Number(retrySeconds) / 60) : 15;
+           throw new Error(lang === 'vi' ? `Tài khoản đã bị khóa tạm thời do nhập sai hoặc thao tác quá nhanh. Vui lòng đợi ${waitMinutes} phút.` : `Too many attempts. Account temporarily locked for ${waitMinutes} mins.`);
         }
-        throw new Error(data.message || t.loginError);
+
+        // Xử lý các lỗi khác (401, 400, 500...)
+        let errorMessage = t.loginError;
+        try {
+            const errorData = await res.json();
+            errorMessage = errorData.message || errorMessage;
+        } catch (jsonError) {
+            // Fallback nếu API không trả về JSON hợp lệ
+            console.error("Non-JSON error response from server");
+        }
+        throw new Error(errorMessage);
       }
 
-      // Lưu Token vào LocalStorage để các Tab khác có thể lấy ra dùng
-      localStorage.setItem('rshield_token', data.token);
+      // Xử lý thành công (Status 2xx)
+      const data = await res.json();
+      
+      localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
 
       onLogin({ username: data.username, role: data.role, email: data.email });
+
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Lỗi không xác định.');
     } finally {
       setIsLoading(false);
     }
@@ -67,15 +89,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, lang, onToggleLang }) =>
         <div className="bg-white py-8 px-4 shadow sm:rounded-xl sm:px-10 border border-gray-100">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-                <AlertCircle size={16} className="shrink-0" /> {error}
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2 shadow-sm animate-in fade-in">
+                <AlertCircle size={18} className="shrink-0 mt-0.5" /> 
+                <span className="font-medium leading-tight">{error}</span>
               </div>
             )}
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">{t.username}</label>
               <div className="mt-1 relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><UserIcon size={18} /></div>
-                <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} className="appearance-none block w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder={lang === 'vi' ? "Nhập username" : "Enter username"} />
+                <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} className="appearance-none block w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100" placeholder={lang === 'vi' ? "Nhập username" : "Enter username"} />
               </div>
             </div>
 
@@ -83,14 +107,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, lang, onToggleLang }) =>
               <label className="block text-sm font-medium text-gray-700">{t.password}</label>
               <div className="mt-1 relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><Lock size={18} /></div>
-                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="appearance-none block w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="••••••" />
+                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} className="appearance-none block w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100" placeholder="••••••" />
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-all active:scale-95 disabled:bg-blue-400">
-              {isLoading ? 'Đang xử lý...' : t.loginBtn}
+            <button type="submit" disabled={isLoading} className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-all active:scale-95 disabled:bg-blue-400 disabled:cursor-not-allowed">
+              {isLoading ? 'Đang kiểm tra...' : t.loginBtn}
             </button>
           </form>
+
+          <div className="mt-6 pt-6 border-t border-gray-100 text-xs text-gray-400 text-center">{t.defaultPass}</div>
+          <div className="mt-3 text-[11px] text-gray-400 text-center leading-relaxed">
+             Lưu ý: Mọi thao tác truy cập đều được giám sát. Chống Brute-force đang được kích hoạt.
+          </div>
         </div>
       </div>
     </div>
