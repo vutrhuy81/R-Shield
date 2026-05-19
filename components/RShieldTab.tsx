@@ -38,6 +38,21 @@ interface FitMetrics {
   peakDayError: number;
 }
 
+// [ADDED] Dòng dữ liệu cho Bảng 3 Benchmark so sánh mô hình
+interface BenchmarkRow {
+  model: string;
+  rmse: number;
+  peakErrorPct: number;
+  peakDayError: number;
+  noteVi: string;
+  noteEn: string;
+}
+
+interface SimulationSeriesPoint {
+  day: number;
+  sim_I: number;
+}
+
 // --- Constants ---
 const DEFAULT_PARAMS: SimulationParams = { 
   N: 2000000,
@@ -124,6 +139,103 @@ const runSEIRModelPure = (
     return resultI;
 };
 
+// --- BENCHMARK BASELINE MODELS ---
+// Moving Average: baseline thống kê đơn giản, dự báo dựa trên trung bình các ngày trước đó.
+const runMovingAverageBaseline = (realData: RealDataPoint[], windowSize = 3): SimulationSeriesPoint[] => {
+  const sorted = [...realData].sort((a, b) => a.day - b.day);
+  return sorted.map((point, index) => {
+    if (index === 0) return { day: point.day, sim_I: point.real_I };
+    const history = sorted.slice(Math.max(0, index - windowSize), index);
+    const avg = history.reduce((sum, item) => sum + item.real_I, 0) / history.length;
+    return { day: point.day, sim_I: avg };
+  });
+};
+
+// SIR chuẩn: không có trạng thái do dự E, không có độ trễ và không có tham số can thiệp.
+const runSIRModelPure = (
+  params: SimulationParams,
+  realDataMap: Map<number, number>,
+  maxRealDay: number
+): SimulationSeriesPoint[] => {
+  const { N, dt, T_end, beta, gamma } = params;
+  const final_T_end = Math.max(T_end, maxRealDay);
+  const steps = Math.floor(final_T_end / dt) + 1;
+
+  const S = new Float64Array(steps);
+  const I = new Float64Array(steps);
+  const R = new Float64Array(steps);
+
+  const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1;
+  I[0] = Math.max(1, startVal);
+  R[0] = 0;
+  S[0] = Math.max(0, N - I[0] - R[0]);
+
+  for (let i = 0; i < steps - 1; i++) {
+    const infectionRate = (beta * S[i] * I[i]) / N;
+    const recoveryRate = gamma * I[i];
+
+    const dS = -infectionRate;
+    const dI = infectionRate - recoveryRate;
+    const dR = recoveryRate;
+
+    S[i + 1] = Math.max(0, S[i] + dS * dt);
+    I[i + 1] = Math.max(0, I[i] + dI * dt);
+    R[i + 1] = Math.max(0, R[i] + dR * dt);
+  }
+
+  const result: SimulationSeriesPoint[] = [];
+  for (let d = 0; d <= final_T_end; d++) {
+    const idx = Math.min(Math.floor(d / dt), steps - 1);
+    result.push({ day: d, sim_I: I[idx] });
+  }
+  return result;
+};
+
+// SEIR chuẩn: có trạng thái do dự E, nhưng chưa có độ trễ và chưa có các tham số can thiệp.
+const runSEIRStandardModelPure = (
+  params: SimulationParams,
+  realDataMap: Map<number, number>,
+  maxRealDay: number
+): SimulationSeriesPoint[] => {
+  const { N, dt, T_end, beta, alpha, gamma } = params;
+  const final_T_end = Math.max(T_end, maxRealDay);
+  const steps = Math.floor(final_T_end / dt) + 1;
+
+  const S = new Float64Array(steps);
+  const E = new Float64Array(steps);
+  const I = new Float64Array(steps);
+  const R = new Float64Array(steps);
+
+  const startVal = realDataMap.size > 0 ? (realDataMap.get(0) || 1) : 1;
+  I[0] = Math.max(1, startVal);
+  E[0] = I[0] * 2;
+  R[0] = 0;
+  S[0] = Math.max(0, N - E[0] - I[0] - R[0]);
+
+  for (let i = 0; i < steps - 1; i++) {
+    const infectionRate = (beta * S[i] * I[i]) / N;
+    const incubationRate = alpha * E[i];
+    const recoveryRate = gamma * I[i];
+
+    const dS = -infectionRate;
+    const dE = infectionRate - incubationRate;
+    const dI = incubationRate - recoveryRate;
+    const dR = recoveryRate;
+
+    S[i + 1] = Math.max(0, S[i] + dS * dt);
+    E[i + 1] = Math.max(0, E[i] + dE * dt);
+    I[i + 1] = Math.max(0, I[i] + dI * dt);
+    R[i + 1] = Math.max(0, R[i] + dR * dt);
+  }
+
+  const result: SimulationSeriesPoint[] = [];
+  for (let d = 0; d <= final_T_end; d++) {
+    const idx = Math.min(Math.floor(d / dt), steps - 1);
+    result.push({ day: d, sim_I: I[idx] });
+  }
+  return result;
+};
+
 // --- Main Component ---
 interface RShieldTabProps { 
   terms?: SearchTerm[]; 
@@ -143,6 +255,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
   const [isFitting, setIsFitting] = useState<boolean>(false);
   
   const [fitMetrics, setFitMetrics] = useState<FitMetrics | null>(null);
+  const [benchmarkRows, setBenchmarkRows] = useState<BenchmarkRow[]>([]);
   const [showMetricsPopup, setShowMetricsPopup] = useState<boolean>(false);
 
   useEffect(() => { 
@@ -249,6 +362,142 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     }
   };
 
+  const calculateMetricsForSeries = (simResults: SimulationSeriesPoint[]): FitMetrics => {
+    if (realData.length === 0) {
+      return { mse: 0, rmse: 0, peakErrorAbs: 0, peakErrorPct: 0, peakDayError: 0 };
+    }
+
+    let maxRealVal = 0;
+    let peakRealDay = 0;
+    realData.forEach(d => {
+      if (d.real_I > maxRealVal) {
+        maxRealVal = d.real_I;
+        peakRealDay = d.day;
+      }
+    });
+
+    let maxSimVal = 0;
+    let peakSimDay = 0;
+    let mseSum = 0;
+    let mseCount = 0;
+
+    simResults.forEach(s => {
+      if (s.sim_I > maxSimVal) {
+        maxSimVal = s.sim_I;
+        peakSimDay = s.day;
+      }
+      if (realDataMap.has(s.day)) {
+        const rVal = realDataMap.get(s.day)!;
+        mseSum += Math.pow(rVal - s.sim_I, 2);
+        mseCount++;
+      }
+    });
+
+    const mse = mseCount > 0 ? mseSum / mseCount : 0;
+    const rmse = Math.sqrt(mse);
+
+    return {
+      mse,
+      rmse,
+      peakErrorAbs: Math.abs(maxSimVal - maxRealVal),
+      peakErrorPct: maxRealVal > 0 ? (Math.abs(maxSimVal - maxRealVal) / maxRealVal) * 100 : 0,
+      peakDayError: Math.abs(peakSimDay - peakRealDay)
+    };
+  };
+
+  // [ĐÃ SỬA] Đồng bộ 100% Hàm mất mát của Benchmark với Hàm chính
+  const getBenchmarkLoss = (metrics: FitMetrics, maxRealVal: number) => {
+    const currentMse = metrics.mse;
+    const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
+    const heightErrorRatio = metrics.peakErrorAbs / (maxRealVal || 1);
+    return (normalizedMse * 500) + (metrics.peakDayError * 100) + (heightErrorRatio * 100);
+  };
+
+  const buildBenchmarkRows = (rshieldParams: SimulationParams): BenchmarkRow[] => {
+    if (realData.length < 3) return [];
+
+    const maxRealVal = Math.max(...realData.map(d => d.real_I));
+    
+    // [ĐÃ SỬA] Tối ưu hóa số lượng Candidates cho Baseline để tránh Lag/Treo máy (Giảm 60% khối lượng tính toán)
+    const nCandidates = [maxRealVal * 2, maxRealVal * 5].map(n => Math.max(10, Math.round(n)));
+    const betaCandidates = [1.0, 1.5, 2.0, 3.0];
+    const gammaCandidates = [0.2, 0.4, 0.6];
+    const alphaCandidates = [0.5, 1.0];
+
+    const movingAverageMetrics = calculateMetricsForSeries(runMovingAverageBaseline(realData, 3));
+
+    let bestSirMetrics: FitMetrics | null = null;
+    let bestSirLoss = Infinity;
+    for (const nTry of nCandidates) {
+      for (const betaTry of betaCandidates) {
+        for (const gammaTry of gammaCandidates) {
+          const testParams = { ...params, N: nTry, beta: betaTry, gamma: gammaTry, alpha: 0, up: 0, ug: 0, rho: 0, v: 0 };
+          const metrics = calculateMetricsForSeries(runSIRModelPure(testParams, realDataMap, maxRealDay));
+          const loss = getBenchmarkLoss(metrics, maxRealVal);
+          if (loss < bestSirLoss) {
+            bestSirLoss = loss;
+            bestSirMetrics = metrics;
+          }
+        }
+      }
+    }
+
+    let bestSeirMetrics: FitMetrics | null = null;
+    let bestSeirLoss = Infinity;
+    for (const nTry of nCandidates) {
+      for (const betaTry of betaCandidates) {
+        for (const gammaTry of gammaCandidates) {
+          for (const alphaTry of alphaCandidates) {
+            const testParams = { ...params, N: nTry, beta: betaTry, alpha: alphaTry, gamma: gammaTry, up: 0, ug: 0, rho: 0, v: 0 };
+            const metrics = calculateMetricsForSeries(runSEIRStandardModelPure(testParams, realDataMap, maxRealDay));
+            const loss = getBenchmarkLoss(metrics, maxRealVal);
+            if (loss < bestSeirLoss) {
+              bestSeirLoss = loss;
+              bestSeirMetrics = metrics;
+            }
+          }
+        }
+      }
+    }
+
+    const rshieldMetrics = calculateMetricsForSeries(runSEIRModelPure(rshieldParams, realDataMap, maxRealDay));
+
+    return [
+      {
+        model: 'Moving Average',
+        rmse: movingAverageMetrics.rmse,
+        peakErrorPct: movingAverageMetrics.peakErrorPct,
+        peakDayError: movingAverageMetrics.peakDayError,
+        noteVi: 'Dự báo đơn giản dựa trên trung bình dữ liệu quá khứ',
+        noteEn: 'Simple forecast based on historical moving average'
+      },
+      {
+        model: 'SIR',
+        rmse: bestSirMetrics?.rmse ?? 0,
+        peakErrorPct: bestSirMetrics?.peakErrorPct ?? 0,
+        peakDayError: bestSirMetrics?.peakDayError ?? 0,
+        noteVi: 'Không có trạng thái do dự E',
+        noteEn: 'No exposed/hesitation state E'
+      },
+      {
+        model: lang === 'vi' ? 'SEIR chuẩn' : 'Standard SEIR',
+        rmse: bestSeirMetrics?.rmse ?? 0,
+        peakErrorPct: bestSeirMetrics?.peakErrorPct ?? 0,
+        peakDayError: bestSeirMetrics?.peakDayError ?? 0,
+        noteVi: 'Có E nhưng chưa có can thiệp và độ trễ',
+        noteEn: 'Has E, but no intervention and no delay'
+      },
+      {
+        model: lang === 'vi' ? 'SEIR cải tiến R-SHIELD' : 'Improved SEIR R-SHIELD',
+        rmse: rshieldMetrics.rmse,
+        peakErrorPct: rshieldMetrics.peakErrorPct,
+        peakDayError: rshieldMetrics.peakDayError,
+        noteVi: 'Có E, độ trễ, can thiệp và Auto Fit',
+        noteEn: 'Includes E, delay, intervention and Auto Fit'
+      }
+    ];
+  };
+
   const handleAutoFit = async () => {
     if (realData.length < 3) return;
     setIsFitting(true);
@@ -256,6 +505,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
     const oldParams = { ...params };
     const oldSummary = getSimSummary(oldParams, calculatedRc);
 
+    // [ĐÃ SỬA] Đưa toàn bộ thuật toán vào setTimeout để giải phóng Main Thread cho React render UI Loading mượt mà.
     setTimeout(() => {
         let maxRealVal = 0;
         let peakRealDay = 0;
@@ -269,6 +519,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         let bestParams = { ...params };
         let minError = Infinity;
 
+        // Vẫn giữ số lượng Candidates đa dạng cho R-SHIELD để đảm bảo độ chính xác cao nhất
         const n_candidates = [maxRealVal * 1.5, maxRealVal * 3, maxRealVal * 5, maxRealVal * 10];
         const beta_candidates = [1.0, 1.5, 2.0, 2.5, 3.5, 5.0];
         const gamma_candidates = [0.2, 0.4, 0.6, 0.8];
@@ -294,15 +545,12 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         let mseCountCandidate = 0;
 
                         simResults.forEach(s => {
-                            // @ts-ignore
                             if (s.sim_I > maxSimVal) {
-                                // @ts-ignore
                                 maxSimVal = s.sim_I;
                                 peakSimDay = s.day;
                             }
                             if (realDataMap.has(s.day)) {
                                 const rVal = realDataMap.get(s.day)!;
-                                // @ts-ignore
                                 mseSumCandidate += Math.pow(rVal - s.sim_I, 2);
                                 mseCountCandidate++;
                             }
@@ -312,7 +560,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                         const dayError = Math.abs(peakSimDay - peakRealDay);
                         const heightErrorRatio = Math.abs(maxSimVal - maxRealVal) / (maxRealVal || 1);
 
-                        // Hàm mất mát tối ưu hóa
+                        // Hàm mất mát tối ưu hóa (Đã được đồng bộ)
                         const normalizedMse = currentMse / Math.pow(maxRealVal || 1, 2); 
                         const totalError = (normalizedMse * 500) + (dayError * 100) + (heightErrorRatio * 100);
 
@@ -328,41 +576,15 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
         bestParams.N = Math.round(bestParams.N);
         setParams(bestParams); 
         
+        // Tính toán Metrics cho R-Shield
         const finalResults = runSEIRModelPure(bestParams, realDataMap, maxRealDay);
+        const finalMetrics = calculateMetricsForSeries(finalResults);
+
+        setFitMetrics(finalMetrics);
         
-        let finalMaxSimVal = 0;
-        let finalPeakSimDay = 0;
-        let mseSum = 0;
-        let mseCount = 0;
-
-        finalResults.forEach(s => {
-            // @ts-ignore
-            if (s.sim_I > finalMaxSimVal) {
-                // @ts-ignore
-                finalMaxSimVal = s.sim_I;
-                finalPeakSimDay = s.day;
-            }
-            if (realDataMap.has(s.day)) {
-                const rVal = realDataMap.get(s.day)!;
-                // @ts-ignore
-                mseSum += Math.pow(rVal - s.sim_I, 2);
-                mseCount++;
-            }
-        });
-
-        // [UPDATED] Tính toán MSE và RMSE
-        const mse = mseCount > 0 ? mseSum / mseCount : 0;
-        const rmse = Math.sqrt(mse);
-
-        const metrics = {
-            mse,
-            rmse,
-            peakErrorAbs: Math.abs(finalMaxSimVal - maxRealVal),
-            peakErrorPct: maxRealVal > 0 ? (Math.abs(finalMaxSimVal - maxRealVal) / maxRealVal) * 100 : 0,
-            peakDayError: Math.abs(finalPeakSimDay - peakRealDay)
-        };
-
-        setFitMetrics(metrics);
+        // Chạy Benchmark sau cùng (Đã giảm nhẹ khối lượng tính toán nên sẽ mượt hơn)
+        setBenchmarkRows(buildBenchmarkRows(bestParams));
+        
         setIsFitting(false);
         setShowMetricsPopup(true);
 
@@ -370,11 +592,11 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             onLog('RSHIELD_AUTO_FIT_PRO', {
                 rumorTopic: topic,
                 before: { params: oldParams, summary: oldSummary },
-                after: { params: bestParams, summary: getSimSummary(bestParams, calculatedRc), evaluationMetrics: metrics }
+                after: { params: bestParams, summary: getSimSummary(bestParams, calculatedRc), evaluationMetrics: finalMetrics }
             });
         }
 
-    }, 100);
+    }, 50); // Cho trình duyệt nghỉ 50ms để vẽ icon "Đang xử lý..." trước khi khóa CPU để tính toán
   };
 
   const handleParamChange = (key: keyof SimulationParams, value: string) => setParams(prev => ({ ...prev, [key]: parseFloat(value) || 0 }));
@@ -503,7 +725,7 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
             </div>
           </div>
 
-          <button onClick={() => { setParams(DEFAULT_PARAMS); setRealData(DEFAULT_REAL_DATA); }} className="w-full py-2 text-sm text-gray-600 border border-dashed rounded-lg flex items-center justify-center gap-2 hover:border-blue-400 transition-colors bg-white"><RefreshCw size={14} /> {t.restoreDefault}</button>
+          <button onClick={() => { setParams(DEFAULT_PARAMS); setRealData(DEFAULT_REAL_DATA); setFitMetrics(null); setBenchmarkRows([]); }} className="w-full py-2 text-sm text-gray-600 border border-dashed rounded-lg flex items-center justify-center gap-2 hover:border-blue-400 transition-colors bg-white"><RefreshCw size={14} /> {t.restoreDefault}</button>
           
           <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mt-4 shadow-sm">
              <div className="flex items-center gap-2 mb-2"><BrainCircuit size={16} className="text-indigo-600"/><h3 className="text-xs font-bold text-indigo-700 uppercase">{t.consultationTitle}</h3></div>
@@ -637,6 +859,47 @@ const RShieldTab: React.FC<RShieldTabProps> = ({ terms = [], lang, realData, set
                             <Target size={40} className="text-red-200 absolute right-[-10px] bottom-[-10px] opacity-50 z-0" />
                         </div>
                     </div>
+
+                    {benchmarkRows.length > 0 && (
+                        <div className="mt-5 border border-gray-200 rounded-xl overflow-hidden bg-white">
+                            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+                                <h4 className="text-sm font-bold text-blue-800">
+                                    {lang === 'vi' ? 'Bảng 3. Benchmark so sánh mô hình R-SHIELD với các mô hình nền' : 'Table 3. Benchmark comparison between R-SHIELD and baseline models'}
+                                </h4>
+                                <p className="text-[11px] text-blue-700 mt-1">
+                                    {lang === 'vi'
+                                      ? 'Các mô hình được so sánh trên cùng bộ dữ liệu thực tế sau khi Auto-Fit.'
+                                      : 'Models are compared on the same real dataset after Auto-Fit.'}
+                                </p>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="bg-gray-50 text-gray-600 uppercase">
+                                        <tr>
+                                            <th className="px-3 py-2 font-bold whitespace-nowrap">{lang === 'vi' ? 'Phương pháp/mô hình' : 'Model'}</th>
+                                            <th className="px-3 py-2 font-bold text-right whitespace-nowrap">RMSE</th>
+                                            <th className="px-3 py-2 font-bold text-right whitespace-nowrap">Peak Error</th>
+                                            <th className="px-3 py-2 font-bold text-right whitespace-nowrap">Peak Time Error</th>
+                                            <th className="px-3 py-2 font-bold whitespace-nowrap">{lang === 'vi' ? 'Nhận xét' : 'Comment'}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {benchmarkRows.map((row, index) => (
+                                            <tr key={row.model} className={index === benchmarkRows.length - 1 ? 'bg-green-50/70' : 'bg-white'}>
+                                                <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">{row.model}</td>
+                                                <td className="px-3 py-2 text-right font-mono">{formatNumber(Math.round(row.rmse))}</td>
+                                                <td className="px-3 py-2 text-right font-mono">{row.peakErrorPct.toFixed(2)}%</td>
+                                                <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                                                    {row.peakDayError} {lang === 'vi' ? 'ngày' : 'days'}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-600 min-w-[180px]">{lang === 'vi' ? row.noteVi : row.noteEn}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
                     <button 
                         onClick={() => setShowMetricsPopup(false)} 
