@@ -2,81 +2,134 @@
 import { connectToDatabase } from '../_lib/mongodb.js';
 import { User, AuditLog } from '../_lib/models.js';
 import { sendAdminAlert } from '../_lib/emailService.js';
+import {
+  assertLoginNotLocked,
+  getClientIp,
+  rateLimit,
+  recordLoginFailure,
+  recordLoginSuccess,
+  setSecurityHeaders,
+} from '../_lib/security.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+const LOGIN_RATE_LIMIT = {
+  keyPrefix: 'auth-login',
+  windowMs: 60 * 1000,
+  max: 10,
+};
+
+const LOGIN_LOCK_OPTIONS = {
+  maxFailures: 5,
+  lockMs: 15 * 60 * 1000,
+};
+
+function normalizeUsername(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') return res.status(405).end();
-  
+  setSecurityHeaders(res);
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  // API-level rate limiting. Đây mới là lớp chặn thật, không phải chỉ khóa nút trên giao diện.
+  if (!rateLimit(req, res, LOGIN_RATE_LIMIT)) return;
+
   try {
     await connectToDatabase();
 
     // ----------------------------------------------------------------------
     // CƠ CHẾ AUTO-SEED: TẠO ADMIN MẶC ĐỊNH CHO LẦN CHẠY ĐẦU TIÊN
+    // Khuyến nghị: đổi mật khẩu mặc định ngay sau lần đăng nhập đầu tiên.
     // ----------------------------------------------------------------------
     const userCount = await User.countDocuments();
     if (userCount === 0) {
-      // Mã hóa mật khẩu '123456'
       const hashedDefaultPassword = await bcrypt.hash('123456', 10);
-      
+
       await User.create({
         username: 'admin',
         password: hashedDefaultPassword,
-        email: 'vutrhuy81@gmail.com', // Email Admin mặc định
+        email: 'vutrhuy81@gmail.com',
         role: 'ADMIN',
-        isActive: true
+        isActive: true,
       });
       console.log('Hệ thống: Đã khởi tạo tài khoản Admin mặc định thành công.');
     }
     // ----------------------------------------------------------------------
 
-    const { username, password } = req.body;
-    
-    // Tìm user theo username
-    const user = await User.findOne({ username: username.toLowerCase(), isActive: true });
-    
-    if (!user) {
-      return res.status(401).json({ message: 'Tài khoản không tồn tại hoặc đã bị khóa.' });
+    const username = normalizeUsername(req.body?.username);
+    const password = String(req.body?.password || '');
+
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Vui lòng nhập username và mật khẩu.' });
     }
 
-    // So sánh mật khẩu người dùng nhập vào với mật khẩu đã mã hóa trong DB
+    // Chống brute-force theo cặp IP + username.
+    if (!assertLoginNotLocked(req, res, username)) return;
+
+    const ip = getClientIp(req);
+    const user = await User.findOne({ username, isActive: true });
+
+    // Dùng thông báo chung để hạn chế dò tài khoản.
+    if (!user) {
+      recordLoginFailure(req, username, LOGIN_LOCK_OPTIONS);
+      await AuditLog.create({
+        username,
+        action: 'LOGIN_FAILED',
+        details: { reason: 'USER_NOT_FOUND_OR_INACTIVE', ip },
+      });
+      return res.status(401).json({ message: 'Tài khoản hoặc mật khẩu không chính xác.' });
+    }
+
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
-      return res.status(401).json({ message: 'Mật khẩu không chính xác.' });
+      recordLoginFailure(req, username, LOGIN_LOCK_OPTIONS);
+      await AuditLog.create({
+        userId: user._id,
+        username: user.username,
+        action: 'LOGIN_FAILED',
+        details: { reason: 'WRONG_PASSWORD', ip },
+      });
+      return res.status(401).json({ message: 'Tài khoản hoặc mật khẩu không chính xác.' });
     }
 
-    // Tạo JWT Token (Thay 'YOUR_SECRET_KEY' bằng một chuỗi bí mật cấu hình trong .env)
+    recordLoginSuccess(req, username);
+
     const token = jwt.sign(
-      { id: user._id, role: user.role }, 
-      process.env.JWT_SECRET || 'R_SHIELD_SECRET_KEY_DEV', 
-      { expiresIn: '8h' }
+      { id: String(user._id), username: user.username, role: user.role },
+      process.env.JWT_SECRET || 'R_SHIELD_SECRET_KEY_DEV',
+      { expiresIn: '8h' },
     );
 
-    // Ghi nhật ký đăng nhập
-    const log = await AuditLog.create({
+    await AuditLog.create({
       userId: user._id,
       username: user.username,
       action: 'LOGIN',
-      details: { ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress },
+      details: { ip },
     });
 
-    // Gửi email cho Admin (Tùy chọn: có thể comment lại nếu không muốn nhận email mỗi lần đăng nhập)
-    await sendAdminAlert('LOGIN', user.username, { 
-      time: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
-      ip: req.headers['x-forwarded-for'] || 'Unknown'
-    });
+    // Không để lỗi email làm hỏng phiên đăng nhập.
+    try {
+      await sendAdminAlert('LOGIN', user.username, {
+        time: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
+        ip,
+      });
+    } catch (emailError) {
+      console.warn('Không thể gửi email cảnh báo đăng nhập:', emailError);
+    }
 
-    // Trả dữ liệu về cho Frontend
-    res.status(200).json({ 
-      id: user._id, 
-      username: user.username, 
-      role: user.role, 
+    return res.status(200).json({
+      id: user._id,
+      username: user.username,
+      role: user.role,
       email: user.email,
-      token: token // Frontend sẽ lưu token này vào localStorage
+      token,
     });
-
   } catch (error: any) {
-    console.error("Lỗi đăng nhập:", error);
-    res.status(500).json({ message: 'Lỗi máy chủ nội bộ.' });
+    console.error('Lỗi đăng nhập:', error);
+    return res.status(500).json({ message: 'Lỗi máy chủ nội bộ.' });
   }
 }
